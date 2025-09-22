@@ -4,21 +4,26 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// Core
 import '../core/network/api_client.dart';
+import '../core/network/api_interceptor.dart';
 import '../core/services/background_service.dart';
+import '../core/services/device_service.dart';
+import '../core/services/location_service.dart';
+import '../core/services/permission_service.dart';
 import '../core/storage/local_storage.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/auth/data/auth_repository_impl.dart';
 import '../shared/repositories/auth_repository.dart';
+
+// Core
+// Repositories
+// Repository Implementations
 
 final GetIt sl = GetIt.instance;
 
 Future<void> init() async {
   // External dependencies
   final sharedPreferences = await SharedPreferences.getInstance();
-  
-  // Initialize FlutterSecureStorage dengan proper configuration
   const flutterSecureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(
       encryptedSharedPreferences: true,
@@ -30,7 +35,7 @@ Future<void> init() async {
   
   // Storage
   sl.registerLazySingleton<SecureStorage>(
-    () => SecureStorageImpl(sl<FlutterSecureStorage>()),
+    () => SecureStorageImpl(sl()),
   );
   sl.registerLazySingleton<LocalStorage>(
     () => LocalStorageImpl(sl()),
@@ -38,13 +43,30 @@ Future<void> init() async {
   
   // Network
   sl.registerLazySingleton(() => Dio());
+  sl.registerLazySingleton(() => ApiInterceptor(sl<SecureStorage>()));
+  
+  // Configure Dio
+  sl<Dio>().interceptors.add(sl<ApiInterceptor>());
+  sl<Dio>().options.connectTimeout = const Duration(seconds: 30);
+  sl<Dio>().options.receiveTimeout = const Duration(seconds: 30);
+  sl<Dio>().options.sendTimeout = const Duration(seconds: 30);
+  
   sl.registerLazySingleton<ApiClient>(
     () => ApiClient(sl()),
   );
   
   // Services
+  sl.registerLazySingleton<PermissionService>(
+    () => PermissionServiceImpl(sl()),
+  );
+  sl.registerLazySingleton<LocationService>(
+    () => LocationServiceImpl(sl(), sl()),
+  );
   sl.registerLazySingleton<BackgroundService>(
     () => BackgroundServiceImpl(),
+  );
+  sl.registerLazySingleton<DeviceService>(
+    () => DeviceServiceImpl(sl()),
   );
   
   // Repositories
@@ -52,6 +74,18 @@ Future<void> init() async {
     () => AuthRepositoryImpl(
       apiClient: sl(),
       secureStorage: sl(),
+      localStorage: sl(),
+    ),
+  );
+  sl.registerLazySingleton<FamilyRepository>(
+    () => FamilyRepositoryImpl(
+      apiClient: sl(),
+      localStorage: sl(),
+    ),
+  );
+  sl.registerLazySingleton<PermissionRepository>(
+    () => PermissionRepositoryImpl(
+      permissionService: sl(),
       localStorage: sl(),
     ),
   );
