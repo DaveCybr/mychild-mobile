@@ -2,17 +2,20 @@
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Core
-// import '../core/network/api_client.dart';
-// import '../core/network/api_interceptor.dart';
-import '../core/storage/secure_storage.dart';
+import '../core/network/api_client.dart';
+import '../core/services/background_service.dart';
+// import '../core/storage/secure_storage.dart';
 import '../core/storage/local_storage.dart';
+import '../core/storage/secure_storage.dart';
+import '../features/auth/data/auth_repository_impl.dart';
+import '../shared/repositories/auth_repository.dart';
 // import '../core/services/permission_service.dart';
 // import '../core/services/location_service.dart';
-// import '../core/services/background_service.dart';
 // import '../core/services/device_service.dart';
+// import 'core/storage/secure_storage.dart';
 
 // Repositories
 // import '../shared/repositories/auth_repository.dart';
@@ -29,7 +32,7 @@ final GetIt sl = GetIt.instance;
 Future<void> init() async {
   // External dependencies
   final sharedPreferences = await SharedPreferences.getInstance();
-  // const flutterSecureStorage = FlutterSecureStorage(
+  // final flutterSecureStorage = FlutterSecureStorage(
   //   aOptions: AndroidOptions(
   //     encryptedSharedPreferences: true,
   //   ),
@@ -50,10 +53,10 @@ Future<void> init() async {
   );
   
   // Network
-  // sl.registerLazySingleton(() => Dio());
-  // sl.registerLazySingleton<ApiClient>(
-  //   () => ApiClient(sl(), sl()),
-  // );
+  sl.registerLazySingleton(() => Dio());
+  sl.registerLazySingleton<ApiClient>(
+    () => ApiClient(sl()),
+  );
   
   // // Services
   // sl.registerLazySingleton<PermissionService>(
@@ -62,21 +65,21 @@ Future<void> init() async {
   // sl.registerLazySingleton<LocationService>(
   //   () => LocationServiceImpl(),
   // );
-  // sl.registerLazySingleton<BackgroundService>(
-  //   () => BackgroundServiceImpl(),
-  // );
+  sl.registerLazySingleton<BackgroundService>(
+    () => BackgroundServiceImpl(),
+  );
   // sl.registerLazySingleton<DeviceService>(
   //   () => DeviceServiceImpl(),
   // );
   
   // // Repositories
-  // sl.registerLazySingleton<AuthRepository>(
-  //   () => AuthRepositoryImpl(
-  //     apiClient: sl(),
-  //     secureStorage: sl(),
-  //     localStorage: sl(),
-  //   ),
-  // );
+  sl.registerLazySingleton<AuthRepository>(
+    () => AuthRepositoryImpl(
+      apiClient: sl(),
+      secureStorage: sl(),
+      localStorage: sl(),
+    ),
+  );
   // sl.registerLazySingleton<FamilyRepository>(
   //   () => FamilyRepositoryImpl(
   //     apiClient: sl(),

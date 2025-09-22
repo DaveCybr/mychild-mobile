@@ -1,16 +1,20 @@
 // core/network/api_client.dart
-import 'package:dio/dio.dart';
-import 'package:retrofit/retrofit.dart';
 
-import '../constants/api_constants.dart';
-import '../../shared/models/user_model.dart';
+import 'package:dio/dio.dart';
+import 'package:retrofit/http.dart';
+// import 'package:retrofit/retrofit.dart';
+
 import '../../shared/models/family_model.dart';
+import '../../shared/models/user_model.dart';
+import '../constants/api_constants.dart';
+import '../error/error_logger.dart';
+import 'api_interceptor.dart';
 
 part 'api_client.g.dart';
 
 @RestApi(baseUrl: ApiConstants.baseUrl)
 abstract class ApiClient {
-  factory ApiClient(Dio dio, {String baseUrl}) = _ApiClient;
+  factory ApiClient(Dio dio, {String baseUrl, ParseErrorLogger? errorLogger}) = _ApiClient;
 
   // Auth Endpoints
   @POST(ApiConstants.login)
@@ -20,7 +24,7 @@ abstract class ApiClient {
   Future<ApiResponse<UserModel>> register(@Body() Map<String, dynamic> registerData);
 
   @POST(ApiConstants.logout)
-  Future<ApiResponse<void>> logout();
+  Future<ApiResponse<dynamic>> logout();
 
   @GET(ApiConstants.user)
   Future<ApiResponse<UserModel>> getCurrentUser();
@@ -42,14 +46,14 @@ abstract class ApiClient {
   Future<ApiResponse<List<UserModel>>> getFamilyMembers();
 
   @DELETE(ApiConstants.familyLeave)
-  Future<ApiResponse<void>> leaveFamily();
+  Future<ApiResponse<dynamic>> leaveFamily();
 
   @PUT(ApiConstants.familyUpdate)
   Future<ApiResponse<FamilyModel>> updateFamily(@Body() Map<String, dynamic> familyData);
 
   // Location Endpoints
   @POST(ApiConstants.locationUpdate)
-  Future<ApiResponse<void>> updateLocation(@Body() Map<String, dynamic> locationData);
+  Future<ApiResponse<dynamic>> updateLocation(@Body() Map<String, dynamic> locationData);
 
   @GET('${ApiConstants.locationTrack}/{childId}')
   Future<ApiResponse<Map<String, dynamic>>> trackChild(@Path() String childId);
@@ -83,20 +87,20 @@ abstract class ApiClient {
   Future<ApiResponse<List<Map<String, dynamic>>>> getAlerts();
 
   @POST(ApiConstants.alertTrigger)
-  Future<ApiResponse<void>> triggerAlert(@Body() Map<String, dynamic> alertData);
+  Future<ApiResponse<dynamic>> triggerAlert(@Body() Map<String, dynamic> alertData);
 
   @POST(ApiConstants.alertMarkRead)
-  Future<ApiResponse<void>> markAlertAsRead(@Body() Map<String, dynamic> data);
+  Future<ApiResponse<dynamic>> markAlertAsRead(@Body() Map<String, dynamic> data);
 
   @GET(ApiConstants.alertUnreadCount)
   Future<ApiResponse<Map<String, dynamic>>> getUnreadAlertCount();
 
   // Notification Endpoints
   @POST(ApiConstants.notificationSend)
-  Future<ApiResponse<void>> sendNotification(@Body() Map<String, dynamic> notificationData);
+  Future<ApiResponse<dynamic>> sendNotification(@Body() Map<String, dynamic> notificationData);
 
   @POST(ApiConstants.notificationMarkRead)
-  Future<ApiResponse<void>> markNotificationAsRead(@Body() Map<String, dynamic> data);
+  Future<ApiResponse<dynamic>> markNotificationAsRead(@Body() Map<String, dynamic> data);
 
   // Camera Endpoints
   @POST(ApiConstants.cameraStore)
@@ -110,8 +114,8 @@ abstract class ApiClient {
   Future<ApiResponse<Map<String, dynamic>>> startScreenSession(@Body() Map<String, dynamic> data);
 
   @POST(ApiConstants.screenEndSession)
-  Future<ApiResponse<void>> endScreenSession(@Body() Map<String, dynamic> data);
+  Future<ApiResponse<dynamic>> endScreenSession(@Body() Map<String, dynamic> data);
 
   @POST(ApiConstants.screenScreenshot)
-  Future<ApiResponse<void>> sendScreenshot(@Body() FormData screenshotData);
+  Future<ApiResponse<dynamic>> sendScreenshot(@Body() FormData screenshotData);
 }

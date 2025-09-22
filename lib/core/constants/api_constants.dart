@@ -2,7 +2,7 @@
 // core/constants/api_constants.dart
 class ApiConstants {
   // Base URL - sesuai dengan environment
-  static const String baseUrl = 'https://your-api-domain.com/api';
+  static const String baseUrl = 'https://parentalcontrol.satelliteorbit.cloud/api';
   
   // Auth Endpoints
   static const String login = '/auth/login';

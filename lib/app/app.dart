@@ -5,11 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
-// import '../core/services/permission_service.dart';
-// import '../shared/repositories/auth_repository.dart';
+import '../core/services/permission_service.dart';
+import '../shared/repositories/auth_repository.dart';
 // import '../shared/repositories/family_repository.dart';
 import '../features/splash/presentation/bloc/splash_bloc.dart';
-// import '../features/auth/presentation/bloc/auth_bloc.dart';
+import '../features/auth/presentation/bloc/auth_bloc.dart';
 // import '../features/family/presentation/bloc/family_bloc.dart';
 // import '../features/permissions/presentation/bloc/permission_bloc.dart';
 import 'injection_container.dart' as di;
@@ -24,11 +24,11 @@ class FamisafeChildApp extends StatelessWidget {
         BlocProvider(
           create: (_) => SplashBloc()..add(SplashStarted()),
         ),
-        // BlocProvider(
-        //   create: (_) => AuthBloc(
-        //     authRepository: di.sl<AuthRepository>(),
-        //   ),
-        // ),
+        BlocProvider(
+          create: (_) => AuthBloc(
+            authRepository: di.sl<AuthRepository>(),
+          ),
+        ),
         // BlocProvider(
         //   create: (_) => FamilyBloc(
         //     familyRepository: di.sl<FamilyRepository>(),

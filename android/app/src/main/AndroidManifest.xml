@@ -62,15 +62,16 @@
 
         <!-- Background Service -->
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location"
-            android:exported="false" />
+        android:name="id.flutter.flutter_background_service.BackgroundService"
+        android:foregroundServiceType="location"
+        android:exported="true"
+        tools:replace="android:exported" />
         
         <!-- Boot Receiver -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true">
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -82,7 +83,8 @@
         <!-- Device Admin Receiver -->
         <receiver
             android:name=".DeviceAdminReceiver"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            android:permission="android.permission.BIND_DEVICE_ADMIN" 
+            android:exported="true">
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/device_admin_policies" />
