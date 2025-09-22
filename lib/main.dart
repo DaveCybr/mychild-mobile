@@ -28,25 +28,43 @@ void main() async {
   );
   
   // Initialize storage
-  await Hive.initFlutter();
-  await HiveBoxes.init();
-  
-  // Initialize dependency injection
-  await di.init();
-  
-  // Initialize background service - PERBAIKAN DI SINI
   try {
-    await BackgroundServiceImpl.initialize(); // Ganti dari BackgroundService.initialize()
+    await Hive.initFlutter();
+    await HiveBoxes.init();
+    print('Hive initialized successfully');
   } catch (e) {
-    print('Background service initialization failed: $e');
-    // App tetap bisa berjalan meski background service gagal
+    print('Hive initialization failed: $e');
   }
   
-  // Initialize WorkManager for background tasks
+  // Initialize dependency injection
   try {
-    await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    await di.init();
+    print('Dependency injection initialized successfully');
+  } catch (e) {
+    print('Dependency injection failed: $e');
+    // Rethrow karena ini critical
+    rethrow;
+  }
+  
+  // Initialize WorkManager SETELAH dependency injection
+  try {
+    await Workmanager().initialize(
+      callbackDispatcher,
+      isInDebugMode: false,
+    );
+    print('WorkManager initialized successfully');
   } catch (e) {
     print('WorkManager initialization failed: $e');
+    // Jangan rethrow, biarkan app tetap jalan
+  }
+  
+  // Initialize background service
+  try {
+    await BackgroundServiceImpl.initialize();
+    print('Background service initialized successfully');
+  } catch (e) {
+    print('Background service initialization failed: $e');
+    // Jangan rethrow, biarkan app tetap jalan
   }
   
   // Setup BLoC observer for debugging
@@ -60,12 +78,14 @@ void main() async {
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
+      print('Executing background task: $task');
       switch (task) {
         case 'locationUpdate':
           return await BackgroundServiceImpl.handleLocationUpdate();
         case 'statusSync':
           return await BackgroundServiceImpl.handleStatusSync();
         default:
+          print('Unknown task: $task');
           return Future.value(true);
       }
     } catch (e) {
