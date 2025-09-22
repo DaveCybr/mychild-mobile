@@ -1,4 +1,4 @@
-// injection_container.dart
+// injection_container.dart - Updated with missing dependencies
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,10 +14,10 @@ import '../core/storage/local_storage.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/auth/data/auth_repository_impl.dart';
 import '../shared/repositories/auth_repository.dart';
-
-// Core
-// Repositories
-// Repository Implementations
+import '../features/family/data/family_repository_impl.dart';
+import '../features/family/data/permission_repository_impl.dart';
+import '../shared/repositories/family_repository.dart';
+import '../shared/repositories/permission_repository.dart';
 
 final GetIt sl = GetIt.instance;
 

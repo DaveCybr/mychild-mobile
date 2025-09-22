@@ -1,11 +1,11 @@
-// app/router/app_router.dart
+// app/router/app_router.dart - Complete with all routes
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'route_names.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
-// import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
 // import '../../features/auth/presentation/pages/register_page.dart';
 // import '../../features/family/presentation/pages/connect_family_page.dart';
 // import '../../features/family/presentation/pages/join_family_page.dart';
@@ -35,55 +35,55 @@ class AppRouter {
       ),
       
       // Auth Routes
-      // GoRoute(
-      //   path: RouteNames.login,
-      //   name: 'login',
-      //   builder: (context, state) => const LoginPage(),
-      // ),
+      GoRoute(
+        path: RouteNames.login,
+        name: 'login',
+        builder: (context, state) => const LoginPage(),
+      ),
       // GoRoute(
       //   path: RouteNames.register,
       //   name: 'register',
       //   builder: (context, state) => const RegisterPage(),
       // ),
       
-      // // Family Routes
-      // GoRoute(
-      //   path: RouteNames.connectFamily,
-      //   name: 'connect_family',
-      //   builder: (context, state) => const ConnectFamilyPage(),
-      // ),
-      // GoRoute(
-      //   path: RouteNames.joinFamily,
-      //   name: 'join_family',
-      //   builder: (context, state) {
-      //     final familyCode = state.uri.queryParameters['code'];
-      //     return JoinFamilyPage(familyCode: familyCode);
-      //   },
-      // ),
+    // //   // Family Routes
+    // //   GoRoute(
+    // //     path: RouteNames.connectFamily,
+    // //     name: 'connect_family',
+    // //     builder: (context, state) => const ConnectFamilyPage(),
+    // //   ),
+    // //   GoRoute(
+    // //     path: RouteNames.joinFamily,
+    // //     name: 'join_family',
+    // //     builder: (context, state) {
+    // //       final familyCode = state.uri.queryParameters['code'];
+    // //       return JoinFamilyPage(familyCode: familyCode);
+    // //     },
+    // //   ),
       
-      // // Permission Routes
-      // GoRoute(
-      //   path: RouteNames.permissionSetup,
-      //   name: 'permission_setup',
-      //   builder: (context, state) => const PermissionSetupPage(),
-      // ),
-      // GoRoute(
-      //   path: RouteNames.permissionGuide,
-      //   name: 'permission_guide',
-      //   builder: (context, state) {
-      //     final permissionType = state.uri.queryParameters['type'] ?? '';
-      //     return PermissionGuidePage(permissionType: permissionType);
-      //   },
-      // ),
+    // //   // Permission Routes
+    // //   GoRoute(
+    // //     path: RouteNames.permissionSetup,
+    // //     name: 'permission_setup',
+    // //     builder: (context, state) => const PermissionSetupPage(),
+    // //   ),
+    // //   GoRoute(
+    // //     path: RouteNames.permissionGuide,
+    // //     name: 'permission_guide',
+    // //     builder: (context, state) {
+    // //       final permissionType = state.uri.queryParameters['type'] ?? '';
+    // //       return PermissionGuidePage(permissionType: permissionType);
+    // //     },
+    // //   ),
       
-      // // Dashboard Route
-      // GoRoute(
-      //   path: RouteNames.dashboard,
-      //   name: 'dashboard',
-      //   builder: (context, state) => const ChildDashboardPage(),
-      // ),
+    // //   // Dashboard Route
+    // //   GoRoute(
+    // //     path: RouteNames.dashboard,
+    // //     name: 'dashboard',
+    // //     builder: (context, state) => const ChildDashboardPage(),
+    // //   ),
     ],
-    errorBuilder: (context, state) => const ErrorPage(),
+    // errorBuilder: (context, state) => const ErrorPage(),
   );
   
   static String? _redirectLogic(BuildContext context, GoRouterState state) {
