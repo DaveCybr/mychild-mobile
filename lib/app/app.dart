@@ -1,8 +1,9 @@
-
 // app/app.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:my_child/features/onboarding/presentation/bloc/onboarding_bloc.dart';
 
+import '../shared/repositories/family_repository.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 import '../core/services/permission_service.dart';
@@ -21,23 +22,18 @@ class FamisafeChildApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider(create: (_) => SplashBloc()..add(SplashStarted())),
+        BlocProvider(create: (_) => OnboardingBloc()..add(OnboardingStarted())),
         BlocProvider(
-          create: (_) => SplashBloc()..add(SplashStarted()),
-        ),
-        BlocProvider(
-          create: (_) => AuthBloc(
-            authRepository: di.sl<AuthRepository>(),
-          ),
+          create: (_) => AuthBloc(authRepository: di.sl<AuthRepository>()),
         ),
         // BlocProvider(
-        //   create: (_) => FamilyBloc(
-        //     familyRepository: di.sl<FamilyRepository>(),
-        //   ),
+        //   create: (_) =>
+        //       FamilyBloc(familyRepository: di.sl<FamilyRepository>()),
         // ),
         // BlocProvider(
-        //   create: (_) => PermissionBloc(
-        //     permissionService: di.sl<PermissionService>(),
-        //   ),
+        //   create: (_) =>
+        //       PermissionBloc(permissionService: di.sl<PermissionService>()),
         // ),
       ],
       child: MaterialApp.router(
@@ -47,9 +43,9 @@ class FamisafeChildApp extends StatelessWidget {
         routerConfig: AppRouter.router,
         builder: (context, child) {
           return MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.noScaling,
-            ),
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.noScaling),
             child: child!,
           );
         },
