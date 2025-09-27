@@ -12,12 +12,10 @@ import 'app/injection_container.dart' as di;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // System UI setup
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-  
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -26,7 +24,7 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
+
   // Initialize storage
   try {
     await Hive.initFlutter();
@@ -35,50 +33,44 @@ void main() async {
   } catch (e) {
     print('Hive initialization failed: $e');
   }
-  
+
   // Initialize dependency injection
   try {
     await di.init();
     print('Dependency injection initialized successfully');
   } catch (e) {
     print('Dependency injection failed: $e');
-    // Rethrow karena ini critical
     rethrow;
   }
-  
-  // Initialize WorkManager SETELAH dependency injection
+
+  // Initialize WorkManager ONLY
   try {
-    await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: false,
-    );
+    await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
     print('WorkManager initialized successfully');
   } catch (e) {
     print('WorkManager initialization failed: $e');
-    // Jangan rethrow, biarkan app tetap jalan
   }
-  
-  // Initialize background service
-  try {
-    await BackgroundServiceImpl.initialize();
-    print('Background service initialized successfully');
-  } catch (e) {
-    print('Background service initialization failed: $e');
-    // Jangan rethrow, biarkan app tetap jalan
-  }
-  
+
   // Setup BLoC observer for debugging
   Bloc.observer = AppBlocObserver();
-  
+
+  // ❌ HAPUS INI - Jangan initialize background service di main()
+  // try {
+  //   await BackgroundServiceImpl.initialize();
+  //   print('Background service initialized successfully');
+  // } catch (e) {
+  //   print('Background service initialization failed: $e');
+  // }
+
   runApp(const FamisafeChildApp());
 }
 
-// Background task callback
+// Background task callback - HANYA untuk WorkManager
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
-      print('Executing background task: $task');
+      print('Executing WorkManager task: $task');
       switch (task) {
         case 'locationUpdate':
           return await BackgroundServiceImpl.handleLocationUpdate();
