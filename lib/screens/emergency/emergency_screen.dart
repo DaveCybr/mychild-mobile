@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:vibration/vibration.dart';
+// import 'package:vibration/vibration.dart';
 // import 'package:lottie/lottie.dart';
 import '../../services/api_service.dart';
 import '../../services/emergency_service.dart';
@@ -89,10 +89,9 @@ class _EmergencyScreenState extends State<EmergencyScreen>
 
               // Main emergency button
               Expanded(
-                child:
-                    _isEmergencyActive
-                        ? _buildActiveEmergencyState()
-                        : _buildEmergencyButton(),
+                child: _isEmergencyActive
+                    ? _buildActiveEmergencyState()
+                    : _buildEmergencyButton(),
               ),
 
               // Quick actions
@@ -188,22 +187,21 @@ class _EmergencyScreenState extends State<EmergencyScreen>
             color: isSelected ? Colors.red[400]! : Colors.grey[300]!,
             width: isSelected ? 2 : 1,
           ),
-          boxShadow:
-              isSelected
-                  ? [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                  : [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
         ),
         child: Column(
           children: [
@@ -301,18 +299,17 @@ class _EmergencyScreenState extends State<EmergencyScreen>
                           height: 200,
                           decoration: BoxDecoration(
                             gradient: RadialGradient(
-                              colors:
-                                  canTrigger
-                                      ? [
-                                        Colors.red[400]!,
-                                        Colors.red[600]!,
-                                        Colors.red[800]!,
-                                      ]
-                                      : [
-                                        Colors.grey[300]!,
-                                        Colors.grey[400]!,
-                                        Colors.grey[500]!,
-                                      ],
+                              colors: canTrigger
+                                  ? [
+                                      Colors.red[400]!,
+                                      Colors.red[600]!,
+                                      Colors.red[800]!,
+                                    ]
+                                  : [
+                                      Colors.grey[300]!,
+                                      Colors.grey[400]!,
+                                      Colors.grey[500]!,
+                                    ],
                             ),
                             shape: BoxShape.circle,
                             boxShadow: [
@@ -670,7 +667,7 @@ class _EmergencyScreenState extends State<EmergencyScreen>
     try {
       // Strong haptic feedback
       HapticFeedback.heavyImpact();
-      await Vibration.vibrate(duration: 1000);
+      // await Vibration.vibrate(duration: 1000);
 
       // Create emergency service
       final apiService = context.read<ApiService>();
@@ -727,35 +724,34 @@ class _EmergencyScreenState extends State<EmergencyScreen>
   Future<bool> _showEmergencyConfirmation() async {
     return await showDialog<bool>(
           context: context,
-          builder:
-              (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                title: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.red[600]),
-                    const SizedBox(width: 8),
-                    const Text('Confirm Emergency'),
-                  ],
-                ),
-                content: Text(
-                  'This will immediately alert your family that you need ${_selectedEmergencyType} help. Are you sure this is an emergency?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[600],
-                    ),
-                    child: const Text('Yes, Send Alert'),
-                  ),
-                ],
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.red[600]),
+                const SizedBox(width: 8),
+                const Text('Confirm Emergency'),
+              ],
+            ),
+            content: Text(
+              'This will immediately alert your family that you need ${_selectedEmergencyType} help. Are you sure this is an emergency?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
               ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[600],
+                ),
+                child: const Text('Yes, Send Alert'),
+              ),
+            ],
+          ),
         ) ??
         false;
   }

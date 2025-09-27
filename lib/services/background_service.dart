@@ -1,6 +1,6 @@
 // lib/services/background_service.dart
 import 'dart:async';
-import 'package:flutter_background_service/flutter_background_service.dart';
+// import 'package:flutter_background_service/flutter_background_service.dart';
 import 'api_service.dart';
 import 'location_service.dart';
 import 'notification_service.dart';
@@ -63,22 +63,21 @@ class BackgroundService {
       // Check if services are still running
       final isLocationActive =
           _locationService.isTracking; // Fixed: use public getter
-      final isNotificationActive =
-          _notificationService
-              .isListening; // You'll need to add this getter too
+      final isNotificationActive = _notificationService
+          .isListening; // You'll need to add this getter too
 
       // Try to process offline queue
       await _apiService.processOfflineQueue();
 
       // Update service notification
-      final service = FlutterBackgroundService();
-      if (await service.isRunning()) {
-        service.invoke('update_notification', {
-          'title': 'Safety Monitor Active',
-          'content':
-              'Location: ${isLocationActive ? '✓' : '✗'} | Notifications: ${isNotificationActive ? '✓' : '✗'}',
-        });
-      }
+      // final service = FlutterBackgroundService();
+      // if (await service.isRunning()) {
+      //   service.invoke('update_notification', {
+      //     'title': 'Safety Monitor Active',
+      //     'content':
+      //         'Location: ${isLocationActive ? '✓' : '✗'} | Notifications: ${isNotificationActive ? '✓' : '✗'}',
+      //   });
+      // }
 
       print(
         'Health check completed - Location: $isLocationActive, Notifications: $isNotificationActive',

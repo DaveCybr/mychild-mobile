@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
-import 'package:vibration/vibration.dart';
-import 'package:url_launcher/url_launcher.dart';
+// import 'package:vibration/vibration.dart';
+// import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'api_service.dart';
 import 'location_service.dart';
@@ -32,7 +32,7 @@ class EmergencyService {
   Future<void> _triggerEmergency(String type, String? message) async {
     try {
       // Immediate feedback
-      await _provideTactileFeedback();
+      // await _provideTactileFeedback();
 
       // Get current location
       final position = await _locationService.getEmergencyLocation();
@@ -62,19 +62,19 @@ class EmergencyService {
   }
 
   // Provide tactile and audio feedback
-  Future<void> _provideTactileFeedback() async {
-    // Strong vibration pattern
-    final hasVibrator = await Vibration.hasVibrator();
-    if (hasVibrator != null && hasVibrator) {
-      await Vibration.vibrate(
-        pattern: [0, 500, 200, 500, 200, 500], // SOS pattern
-        intensities: [0, 255, 0, 255, 0, 255],
-      );
-    }
+  // Future<void> _provideTactileFeedback() async {
+  //   // Strong vibration pattern
+  //   final hasVibrator = await Vibration.hasVibrator();
+  //   if (hasVibrator != null && hasVibrator) {
+  //     await Vibration.vibrate(
+  //       pattern: [0, 500, 200, 500, 200, 500], // SOS pattern
+  //       intensities: [0, 255, 0, 255, 0, 255],
+  //     );
+  //   }
 
-    // Audio feedback through system sound
-    await SystemSound.play(SystemSoundType.alert);
-  }
+  //   // Audio feedback through system sound
+  //   await SystemSound.play(SystemSoundType.alert);
+  // }
 
   // Perform additional emergency actions
   Future<void> _performEmergencyActions(String type, Position position) async {
@@ -176,9 +176,9 @@ class EmergencyService {
       const emergencyNumber = 'tel:112'; // European emergency number
       final uri = Uri.parse(emergencyNumber);
 
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      }
+      // if (await canLaunchUrl(uri)) {
+      //   await launchUrl(uri);
+      // }
     } catch (e) {
       print('Failed to make emergency call: $e');
     }
