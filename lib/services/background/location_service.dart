@@ -1,57 +1,72 @@
-import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+// services/background/location_service.dart
 import 'dart:async';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../services/api_service.dart';
-// import 'auth_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:battery_plus/battery_plus.dart';
+import '../../core/constants/app_endpoints.dart';
+import '../../core/constants/app_constants.dart';
+import '../api/api_service.dart';
+import '../local/local_storage_service.dart';
 
-class LocationService extends ChangeNotifier {
-  Position? _current;
-  Position? get current => _current;
-  StreamSubscription<Position>? _sub;
+class LocationService {
+  static Timer? _locationTimer;
+  static final Battery _battery = Battery();
 
-  Future<void> startTracking(String token, {int intervalSeconds = 30}) async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+  static void startTracking() {
+    _locationTimer?.cancel();
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
-    }
+    _locationTimer = Timer.periodic(
+      Duration(minutes: AppConstants.locationUpdateInterval),
+      (_) => _sendLocation(),
+    );
 
-    _sub = Geolocator.getPositionStream().listen((pos) {
-      _current = pos;
-      notifyListeners();
-      _sendLocationToServer(pos, token);
-    });
+    // Send initial location
+    _sendLocation();
   }
 
-  Future<void> stopTracking() async {
-    await _sub?.cancel();
-    _sub = null;
+  static void stopTracking() {
+    _locationTimer?.cancel();
   }
 
-  Future<void> _sendLocationToServer(Position pos, String token) async {
-    final body = {
-      'device_id': 'device_001', // replace with unique id logic
-      'latitude': pos.latitude,
-      'longitude': pos.longitude,
-    };
-
+  static Future<void> _sendLocation() async {
     try {
-      await http.post(
-        Uri.parse('${ApiService.baseUrl}/locations'),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer \$token',
-          'Content-Type': 'application/json',
+      // Check permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Get battery level
+      final batteryLevel = await _battery.batteryLevel;
+
+      // Get device ID
+      final deviceId = await LocalStorageService.getDeviceId();
+      if (deviceId == null) return;
+
+      // Send to API
+      final apiService = ApiService();
+      await apiService.init();
+      await apiService.post(
+        ApiEndpoints.sendLocation,
+        data: {
+          'device_id': deviceId,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'battery_level': batteryLevel,
+          'timestamp': DateTime.now().toIso8601String(),
         },
-        body: jsonEncode(body),
       );
     } catch (e) {
-      // ignore network errors for now
+      print('Failed to send location: $e');
     }
+  }
+
+  static Future<void> sendImmediateLocation() async {
+    await _sendLocation();
   }
 }
