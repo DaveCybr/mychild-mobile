@@ -14,22 +14,32 @@ class BackgroundController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    initializeAllServices();
+    // Delay initialization untuk memastikan Flutter sudah ready
+    Future.delayed(Duration(milliseconds: 500), () {
+      initializeAllServices();
+    });
   }
 
   Future<void> initializeAllServices() async {
-    // Initialize camera service
-    await CameraService.initialize();
+    try {
+      // Initialize camera service
+      await CameraService.initialize();
 
-    // Start background services
-    BackgroundServiceManager.startBackgroundServices();
+      // Start background service AFTER everything is ready
+      BackgroundServiceManager.startBackgroundServices();
 
-    // Start individual monitoring services
-    LocationService.startTracking();
-    NotificationService.startListening();
-    ScreenMonitorService.startMonitoring();
+      // Give time for background service to start
+      await Future.delayed(Duration(milliseconds: 1000));
 
-    servicesRunning.value = true;
+      // Start individual monitoring services
+      LocationService.startTracking();
+      NotificationService.startListening();
+      ScreenMonitorService.startMonitoring();
+
+      servicesRunning.value = true;
+    } catch (e) {
+      print('Error initializing services: $e');
+    }
   }
 
   void stopAllServices() {

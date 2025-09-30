@@ -10,8 +10,10 @@ import 'screens/splash/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize services
+  // Initialize local storage first
   await LocalStorageService.init();
+
+  // IMPORTANT: Only CONFIGURE service, don't start yet
   await BackgroundServiceManager.initializeService();
 
   // Lock orientation to portrait
@@ -28,8 +30,6 @@ void main() async {
     ),
   );
 
-  // Hapus Get.lazyPut dari sini
-
   runApp(const ChildApp());
 }
 
@@ -42,7 +42,7 @@ class ChildApp extends StatelessWidget {
       title: 'Family Safety',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialBinding: InitialBinding(), // Tambahkan ini
+      initialBinding: InitialBinding(),
       home: const SplashScreen(),
     );
   }

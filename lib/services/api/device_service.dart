@@ -7,7 +7,8 @@ import 'api_service.dart';
 import '../local/local_storage_service.dart';
 
 class DeviceService extends GetxService {
-  final ApiService _apiService = Get.find<ApiService>();
+  // Lazy getter instead of eager initialization
+  ApiService get _apiService => Get.find<ApiService>();
 
   Future<String> getDeviceId() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -58,7 +59,6 @@ class DeviceService extends GetxService {
       final pairingResponse = PairingResponseModel.fromJson(response.data);
 
       if (pairingResponse.success && pairingResponse.device != null) {
-        // Save device info locally
         await LocalStorageService.saveDeviceInfo(
           deviceId: deviceId,
           familyCode: familyCode,
@@ -83,6 +83,25 @@ class DeviceService extends GetxService {
       );
     } catch (e) {
       print('Failed to update device status: $e');
+    }
+  }
+
+  Future<void> updateLocation(double latitude, double longitude) async {
+    try {
+      final deviceId = await LocalStorageService.getDeviceId();
+      if (deviceId == null) return;
+
+      await _apiService.post(
+        ApiEndpoints.sendLocation,
+        data: {
+          'device_id': deviceId,
+          'latitude': latitude,
+          'longitude': longitude,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Failed to update location: $e');
     }
   }
 }

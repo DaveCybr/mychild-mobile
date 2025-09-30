@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:get/get.dart';
 import '../../core/constants/app_endpoints.dart';
 import '../../core/constants/app_constants.dart';
 import '../api/api_service.dart';
@@ -27,6 +28,7 @@ class LocationService {
     _locationTimer?.cancel();
   }
 
+  // Di bagian _sendLocation()
   static Future<void> _sendLocation() async {
     try {
       // Check permission
@@ -48,9 +50,9 @@ class LocationService {
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null) return;
 
-      // Send to API
-      final apiService = ApiService();
-      await apiService.init();
+      // Get ApiService lazily
+      final apiService = Get.find<ApiService>();
+
       await apiService.post(
         ApiEndpoints.sendLocation,
         data: {

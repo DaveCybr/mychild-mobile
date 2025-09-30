@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_screen_capture/flutter_screen_capture.dart';
+import 'package:get/get.dart';
 
 import '../../core/constants/app_endpoints.dart';
 import '../../core/constants/app_constants.dart';
@@ -40,8 +41,8 @@ class ScreenMonitorService {
       final childId = await LocalStorageService.getChildId();
       if (childId == null) return;
 
-      final apiService = ApiService();
-      await apiService.init();
+      // Get ApiService lazily
+      final apiService = Get.find<ApiService>();
 
       final response = await apiService.get(
         ApiEndpoints.checkActiveSession.replaceAll(':childId', childId),
@@ -58,6 +59,30 @@ class ScreenMonitorService {
       }
     } catch (e) {
       print('Failed to check active session: $e');
+    }
+  }
+
+  static Future<void> _sendFrame() async {
+    if (!_isStreaming || _currentSessionToken == null) return;
+
+    try {
+      final screenshot = await _captureScreenshot();
+      if (screenshot == null) return;
+
+      // Get ApiService lazily
+      final apiService = Get.find<ApiService>();
+
+      await apiService.post(
+        ApiEndpoints.sendScreenFrame,
+        data: {
+          'session_token': _currentSessionToken,
+          'frame_data': base64Encode(screenshot),
+          'frame_number': _frameCounter++,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Failed to send frame: $e');
     }
   }
 
@@ -80,31 +105,6 @@ class ScreenMonitorService {
     _isStreaming = false;
     _streamTimer?.cancel();
     _currentSessionToken = null;
-  }
-
-  /// Kirim frame screenshot ke server
-  static Future<void> _sendFrame() async {
-    if (!_isStreaming || _currentSessionToken == null) return;
-
-    try {
-      final screenshot = await _captureScreenshot();
-      if (screenshot == null) return;
-
-      final apiService = ApiService();
-      await apiService.init();
-
-      await apiService.post(
-        ApiEndpoints.sendScreenFrame,
-        data: {
-          'session_token': _currentSessionToken,
-          'frame_data': base64Encode(screenshot),
-          'frame_number': _frameCounter++,
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      );
-    } catch (e) {
-      print('Failed to send frame: $e');
-    }
   }
 
   /// Capture screenshot -> return Uint8List

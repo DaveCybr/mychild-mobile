@@ -85,10 +85,12 @@ class DashboardController extends GetxController {
     // Update monitoring status
     locationTracking.value = true;
     notificationMirroring.value = true;
-    screenMonitoring.value = false; // Will be true when parent initiates
+    screenMonitoring.value = false;
 
-    // Ensure background services are running
-    BackgroundServiceManager.startBackgroundServices();
+    // Ensure background services are running with delay
+    Future.delayed(Duration(milliseconds: 500), () {
+      BackgroundServiceManager.startBackgroundServices();
+    });
   }
 
   void minimizeApp() {

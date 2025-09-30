@@ -1,5 +1,6 @@
 class ApiEndpoints {
-  static const String baseUrl = 'https://your-api-url.com/api';
+  static const String baseUrl =
+      'http://parentalcontrol.satelliteorbit.cloud/api';
 
   // Auth
   static const String register = '/auth/register';

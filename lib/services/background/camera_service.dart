@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
+import 'package:get/get.dart' hide FormData, MultipartFile;
 import '../../core/constants/app_endpoints.dart';
 import '../api/api_service.dart';
 import '../local/local_storage_service.dart';
@@ -64,8 +65,8 @@ class CameraService {
       final childId = await LocalStorageService.getChildId();
       if (childId == null) return;
 
-      final apiService = ApiService();
-      await apiService.init();
+      // Get ApiService lazily and initialize
+      final apiService = Get.find<ApiService>();
 
       FormData formData = FormData.fromMap({
         'child_id': childId,

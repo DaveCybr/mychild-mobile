@@ -1,3 +1,4 @@
+import 'package:get/get.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import '../../core/constants/app_endpoints.dart';
@@ -33,8 +34,8 @@ class NotificationService {
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null) return;
 
-      final apiService = ApiService();
-      await apiService.init();
+      // Get ApiService lazily
+      final apiService = Get.find<ApiService>();
 
       await apiService.post(
         ApiEndpoints.sendNotification,
