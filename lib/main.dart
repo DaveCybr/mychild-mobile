@@ -1,35 +1,46 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'services/auth_service.dart';
-import 'services/location_service.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'core/themes/app_theme.dart';
+import 'services/background/background_service_manager.dart';
+import 'services/local/local_storage_service.dart';
+import 'screens/splash/splash_screen.dart';
 
-void main() {
-  runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize services
+  await LocalStorageService.init();
+  await BackgroundServiceManager.initializeService();
+
+  // Lock orientation to portrait
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  runApp(const ChildApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ChildApp extends StatelessWidget {
+  const ChildApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
-        ChangeNotifierProvider(create: (_) => LocationService()),
-      ],
-      child: MaterialApp(
-        title: 'Child App',
-        theme: ThemeData(primarySwatch: Colors.blue),
-        home: Consumer<AuthService>(
-          builder: (context, auth, _) {
-            if (auth.isAuthenticated) return HomeScreen();
-            return LoginScreen();
-          },
-        ),
-      ),
+    return GetMaterialApp(
+      title: 'Family Safety',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      home: const SplashScreen(),
     );
   }
 }
