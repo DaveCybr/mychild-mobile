@@ -31,21 +31,16 @@ class BackgroundServiceManager {
   }
 
   @pragma('vm:entry-point')
-  static Future<void> onStart(ServiceInstance service) async {
-    DartPluginRegistrant.ensureInitialized();
-
-    // CRITICAL: Set as foreground IMMEDIATELY for Android
+  static void onStart(ServiceInstance service) {
+    // CRITICAL: Set foreground FIRST - synchronous, no await
     if (service is AndroidServiceInstance) {
       service.setAsForegroundService();
-
-      // Update notification immediately
-      service.setForegroundNotificationInfo(
-        title: "Family Safety",
-        content: "Starting monitoring services...",
-      );
     }
 
-    // Setup event listeners AFTER foreground is set
+    // Register plugins immediately after
+    DartPluginRegistrant.ensureInitialized();
+
+    // Setup event listeners
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
@@ -60,21 +55,25 @@ class BackgroundServiceManager {
       service.stopSelf();
     });
 
-    // Initialize services
+    // Schedule async initialization AFTER foreground is set
+    Future.microtask(() => _initializeAsync(service));
+  }
+
+  static Future<void> _initializeAsync(ServiceInstance service) async {
     try {
+      // Now safe to do async operations
       await LocalStorageService.init();
       final isPaired = await LocalStorageService.getIsPaired();
 
-      if (isPaired) {
-        // Update notification
-        if (service is AndroidServiceInstance) {
-          service.setForegroundNotificationInfo(
-            title: "Family Safety Active",
-            content: "Monitoring location and notifications",
-          );
-        }
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: "Family Safety",
+          content: isPaired ? "Monitoring active" : "Ready",
+        );
+      }
 
-        // Start all monitoring services
+      if (isPaired) {
+        // Start monitoring services
         LocationService.startTracking();
         NotificationService.startListening();
         ScreenMonitorService.startMonitoring();
@@ -83,36 +82,27 @@ class BackgroundServiceManager {
         Timer.periodic(const Duration(seconds: 30), (timer) async {
           if (service is AndroidServiceInstance) {
             if (await service.isForegroundService()) {
+              final now = DateTime.now();
               service.setForegroundNotificationInfo(
                 title: "Family Safety Active",
                 content:
-                    "Last check: ${DateTime.now().toString().substring(11, 16)}",
+                    "Last update: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
               );
             } else {
-              // Service berhenti, cancel timer
               timer.cancel();
               return;
             }
           }
 
-          // Send heartbeat
           service.invoke('heartbeat');
         });
-      } else {
-        // Belum paired
-        if (service is AndroidServiceInstance) {
-          service.setForegroundNotificationInfo(
-            title: "Family Safety",
-            content: "Waiting for pairing...",
-          );
-        }
       }
     } catch (e) {
-      print('Error in background service: $e');
+      print('Background service initialization error: $e');
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: "Service error, restarting...",
+          content: "Service running (error: $e)",
         );
       }
     }
