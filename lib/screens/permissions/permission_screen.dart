@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/permission_controller.dart';
-import '../../controllers/background_controller.dart';
+import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../dashboard/dashboard_screen.dart';
 
@@ -15,21 +15,34 @@ class PermissionScreen extends StatefulWidget {
 }
 
 class _PermissionScreenState extends State<PermissionScreen> {
-  final PermissionController _controller = Get.put(PermissionController());
+  // Use Get.put with permanent: false to ensure proper lifecycle
+  late final PermissionController _controller;
 
   @override
   void initState() {
     super.initState();
-    // Initialize background controller
-    Get.put(BackgroundController());
+    // Initialize controller properly
+    _controller = Get.put(PermissionController(), permanent: false);
+  }
+
+  @override
+  void dispose() {
+    // Clean up controller when screen is disposed
+    Get.delete<PermissionController>();
+    super.dispose();
   }
 
   Future<void> _requestNextPermission() async {
     final index = _controller.currentPermissionIndex.value;
 
     if (index >= _controller.permissionTitles.length) {
-      // All permissions handled, go to dashboard
-      Get.offAll(() => const DashboardScreen());
+      // PENTING: Simpan status permission selesai
+      await LocalStorageService.setPermissionCompleted(true);
+
+      // Semua permission selesai, ke dashboard
+      if (mounted) {
+        Get.offAll(() => const DashboardScreen());
+      }
       return;
     }
 
@@ -51,16 +64,14 @@ class _PermissionScreenState extends State<PermissionScreen> {
       case 4:
         granted = await _controller.requestBatteryOptimization();
         break;
-        // case 5:
-        //   granted = await _controller.requestAccessibilityPermission();
-        break;
     }
 
     if (granted || index == 5) {
-      // Move to next permission or finish
       _controller.currentPermissionIndex.value = index + 1;
       await Future.delayed(const Duration(milliseconds: 500));
-      _requestNextPermission();
+      if (mounted) {
+        _requestNextPermission();
+      }
     }
   }
 
@@ -75,7 +86,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
             children: [
               const SizedBox(height: 40),
 
-              // Title
               const Text(
                 'Setup Permissions',
                 style: TextStyle(
@@ -87,7 +97,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
               const SizedBox(height: 8),
 
-              // Description
               const Text(
                 'We need some permissions to keep your family connected',
                 style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
@@ -96,45 +105,50 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
               const SizedBox(height: 48),
 
-              // Permission list
+              // Use GetBuilder instead of Obx for better control
               Expanded(
-                child: Obx(
-                  () => ListView.builder(
-                    itemCount: _controller.permissionTitles.length,
-                    itemBuilder: (context, index) {
-                      final isCurrentOrPast =
-                          index <= _controller.currentPermissionIndex.value;
-                      final isGranted = _getPermissionStatus(index);
+                child: GetBuilder<PermissionController>(
+                  id: 'permission_list',
+                  builder: (controller) {
+                    return ListView.builder(
+                      itemCount: controller.permissionTitles.length,
+                      itemBuilder: (context, index) {
+                        final isCurrentOrPast =
+                            index <= controller.currentPermissionIndex.value;
+                        final isGranted = _getPermissionStatus(index);
 
-                      return _buildPermissionItem(
-                        title: _controller.permissionTitles[index],
-                        description: _controller.permissionDescriptions[index],
-                        isActive:
-                            index == _controller.currentPermissionIndex.value,
-                        isGranted: isGranted,
-                        isPending: !isCurrentOrPast,
-                      );
-                    },
-                  ),
+                        return _buildPermissionItem(
+                          title: controller.permissionTitles[index],
+                          description: controller.permissionDescriptions[index],
+                          isActive:
+                              index == controller.currentPermissionIndex.value,
+                          isGranted: isGranted,
+                          isPending: !isCurrentOrPast,
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
 
-              // Progress indicator
-              Obx(
-                () => LinearProgressIndicator(
-                  value:
-                      (_controller.currentPermissionIndex.value + 1) /
-                      _controller.permissionTitles.length,
-                  backgroundColor: AppColors.grey200,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primary,
-                  ),
-                ),
+              // Progress indicator with GetBuilder
+              GetBuilder<PermissionController>(
+                id: 'progress',
+                builder: (controller) {
+                  return LinearProgressIndicator(
+                    value:
+                        (controller.currentPermissionIndex.value + 1) /
+                        controller.permissionTitles.length,
+                    backgroundColor: AppColors.grey200,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 24),
 
-              // Action button
               CustomButton(
                 text: 'Grant Permissions',
                 onPressed: _requestNextPermission,
@@ -142,7 +156,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
               const SizedBox(height: 16),
 
-              // Skip button
               TextButton(
                 onPressed: () {
                   Get.dialog(
@@ -157,9 +170,15 @@ class _PermissionScreenState extends State<PermissionScreen> {
                           child: const Text('Cancel'),
                         ),
                         TextButton(
-                          onPressed: () {
+                          onPressed: () async {
+                            // PENTING: Tetap simpan status meskipun di-skip
+                            await LocalStorageService.setPermissionCompleted(
+                              true,
+                            );
                             Get.back();
-                            Get.offAll(() => const DashboardScreen());
+                            if (mounted) {
+                              Get.offAll(() => const DashboardScreen());
+                            }
                           },
                           child: const Text(
                             'Skip',

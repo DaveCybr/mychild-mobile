@@ -30,6 +30,11 @@ class LocalStorageService {
     await _secureStorage.write(key: AppConstants.keyAuthToken, value: token);
   }
 
+  // BARU: Save permission completion status
+  static Future<void> setPermissionCompleted(bool completed) async {
+    await _prefs.setBool(AppConstants.keyPermissionCompleted, completed);
+  }
+
   // Get methods
   static Future<String?> getDeviceId() async {
     return _prefs.getString(AppConstants.keyDeviceId);
@@ -55,6 +60,11 @@ class LocalStorageService {
     return await _secureStorage.read(key: AppConstants.keyAuthToken);
   }
 
+  // BARU: Get permission completion status
+  static Future<bool> isPermissionCompleted() async {
+    return _prefs.getBool(AppConstants.keyPermissionCompleted) ?? false;
+  }
+
   // Clear methods
   static Future<void> clearAll() async {
     await _prefs.clear();
@@ -67,6 +77,7 @@ class LocalStorageService {
     await _prefs.remove(AppConstants.keyFamilyCode);
     await _prefs.remove(AppConstants.keyParentId);
     await _prefs.setBool(AppConstants.keyIsPaired, false);
+    await _prefs.remove(AppConstants.keyPermissionCompleted);
     await _secureStorage.delete(key: AppConstants.keyAuthToken);
   }
 }

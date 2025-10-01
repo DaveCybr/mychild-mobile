@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/pairing_controller.dart';
+import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../permissions/permission_screen.dart';
@@ -22,6 +23,21 @@ class _PairingScreenState extends State<PairingScreen> {
     (_) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfAlreadyPaired();
+  }
+
+  // BARU: Cek apakah sudah paired
+  Future<void> _checkIfAlreadyPaired() async {
+    final isPaired = await LocalStorageService.getIsPaired();
+    if (isPaired) {
+      // Sudah paired, langsung ke permission screen
+      Get.off(() => const PermissionScreen());
+    }
+  }
 
   @override
   void dispose() {
@@ -58,12 +74,10 @@ class _PairingScreenState extends State<PairingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Get screen size for responsive design
     final size = MediaQuery.of(context).size;
     final isSmallScreen = size.height < 600;
     final isLargeScreen = size.width > 600;
 
-    // Calculate responsive sizes
     final iconSize = isSmallScreen ? 80.0 : (isLargeScreen ? 120.0 : 100.0);
     final titleSize = isSmallScreen ? 24.0 : (isLargeScreen ? 32.0 : 28.0);
     final descSize = isSmallScreen ? 14.0 : 16.0;
@@ -100,7 +114,6 @@ class _PairingScreenState extends State<PairingScreen> {
                     children: [
                       SizedBox(height: isSmallScreen ? 20 : 40),
 
-                      // Icon
                       Container(
                         width: iconSize,
                         height: iconSize,
@@ -117,7 +130,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
                       SizedBox(height: isSmallScreen ? 24 : 32),
 
-                      // Title
                       Text(
                         'Enter Family Code',
                         style: TextStyle(
@@ -130,7 +142,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
                       const SizedBox(height: 8),
 
-                      // Description
                       Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: isLargeScreen ? 32 : 0,
@@ -148,7 +159,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
                       SizedBox(height: spacing),
 
-                      // Code input fields - Responsive spacing
                       Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: isSmallScreen ? 8 : 0,
@@ -215,7 +225,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
                       SizedBox(height: isSmallScreen ? 16 : 24),
 
-                      // Error message
                       Obx(
                         () => _controller.errorMessage.value.isNotEmpty
                             ? Container(
@@ -239,10 +248,8 @@ class _PairingScreenState extends State<PairingScreen> {
                             : const SizedBox.shrink(),
                       ),
 
-                      // const Spacer(),
                       SizedBox(height: isSmallScreen ? 16 : 24),
 
-                      // Submit button
                       Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: isLargeScreen ? 32 : 0,
@@ -270,7 +277,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Help text
                       TextButton(
                         onPressed: () {
                           Get.snackbar(

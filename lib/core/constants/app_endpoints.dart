@@ -8,6 +8,8 @@ class ApiEndpoints {
 
   // Device
   static const String pairDevice = '/devices/pair';
+  static const String verifyDevice = '/devices/verify'; // BARU
+  static const String unpairDevice = '/devices/unpair'; // BARU
   static const String updateStatus = '/device/:deviceId/status';
 
   // Tracking

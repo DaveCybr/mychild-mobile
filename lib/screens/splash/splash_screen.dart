@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/local/local_storage_service.dart';
+import '../../services/api/device_service.dart';
 import '../onboarding/onboarding_screen.dart';
+import '../permissions/permission_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import 'dart:developer' as developer;
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,6 +18,8 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  static const String _tag = 'SplashScreen';
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
@@ -36,18 +41,92 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _animationController.forward();
-    _checkPairingStatus();
+    _checkAppStatus();
   }
 
-  Future<void> _checkPairingStatus() async {
+  Future<void> _checkAppStatus() async {
     await Future.delayed(const Duration(seconds: 2));
 
-    final isPaired = await LocalStorageService.getIsPaired();
+    developer.log('Starting app status check', name: _tag);
 
-    if (isPaired) {
+    // Step 1: Cek local storage dulu
+    // final isPairedLocal = await LocalStorageService.getIsPaired();
+
+    // developer.log('Local pairing status: $isPairedLocal', name: _tag);
+
+    // if (!isPairedLocal) {
+    //   // Belum pernah pairing -> Onboarding
+    //   developer.log('Not paired locally, go to onboarding', name: _tag);
+    //   Get.offAll(() => const OnboardingScreen());
+    //   return;
+    // }
+
+    // Step 2: Verify dengan server
+    try {
+      final deviceService = Get.find<DeviceService>();
+      final serverData = await deviceService.verifyPairing();
+
+      if (serverData == null) {
+        // Data local ada, tapi server tidak ada (mungkin di-unpair dari parent)
+        developer.log(
+          'Local says paired, but server says not paired. Clearing local data.',
+          name: _tag,
+          level: 900,
+        );
+
+        await LocalStorageService.clearPairing();
+
+        Get.snackbar(
+          'Device Unpaired',
+          'This device has been unpaired. Please pair again.',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+
+        Get.offAll(() => const OnboardingScreen());
+        return;
+      }
+
+      developer.log(
+        'Server verification successful, device is paired',
+        name: _tag,
+      );
+
+      // Step 3: Cek permission status
+      final isPermissionCompleted =
+          await LocalStorageService.isPermissionCompleted();
+
+      developer.log('Permission completed: $isPermissionCompleted', name: _tag);
+
+      if (!isPermissionCompleted) {
+        // Sudah pairing tapi belum setup permission
+        Get.offAll(() => const PermissionScreen());
+        return;
+      }
+
+      // Semua OK -> Dashboard
       Get.offAll(() => const DashboardScreen());
-    } else {
-      Get.offAll(() => const OnboardingScreen());
+    } catch (e) {
+      developer.log(
+        'Error during server verification',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
+
+      // Kalau ada error network, tetap lanjut berdasarkan local data
+      developer.log('Network error, using local data', name: _tag, level: 900);
+
+      final isPermissionCompleted =
+          await LocalStorageService.isPermissionCompleted();
+
+      if (!isPermissionCompleted) {
+        Get.offAll(() => const PermissionScreen());
+      } else {
+        Get.offAll(() => const DashboardScreen());
+      }
     }
   }
 
@@ -106,6 +185,18 @@ class _SplashScreenState extends State<SplashScreen>
                       color: AppColors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w300,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  // Loading indicator
+                  const SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.white,
+                      ),
+                      strokeWidth: 3,
                     ),
                   ),
                 ],

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_screen_capture/flutter_screen_capture.dart';
 import 'package:get/get.dart';
+import 'dart:developer' as developer;
 
 import '../../core/constants/app_endpoints.dart';
 import '../../core/constants/app_constants.dart';
@@ -10,6 +11,8 @@ import '../api/api_service.dart';
 import '../local/local_storage_service.dart';
 
 class ScreenMonitorService {
+  static const String _tag = 'ScreenMonitorService';
+
   static Timer? _checkTimer;
   static Timer? _streamTimer;
   static bool _isStreaming = false;
@@ -18,6 +21,8 @@ class ScreenMonitorService {
 
   /// Mulai monitoring
   static void startMonitoring() {
+    developer.log('Starting screen monitoring', name: _tag);
+
     _checkTimer?.cancel();
 
     _checkTimer = Timer.periodic(
@@ -25,12 +30,16 @@ class ScreenMonitorService {
       (_) => _checkForActiveSession(),
     );
 
-    // Initial check
-    _checkForActiveSession();
+    // Initial check dengan delay untuk memastikan app sudah siap
+    Future.delayed(const Duration(seconds: 3), () {
+      _checkForActiveSession();
+    });
   }
 
   /// Hentikan monitoring
   static void stopMonitoring() {
+    developer.log('Stopping screen monitoring', name: _tag);
+
     _checkTimer?.cancel();
     stopStreaming();
   }
@@ -39,7 +48,14 @@ class ScreenMonitorService {
   static Future<void> _checkForActiveSession() async {
     try {
       final childId = await LocalStorageService.getChildId();
-      if (childId == null) return;
+      if (childId == null) {
+        developer.log(
+          'Child ID not found, skipping session check',
+          name: _tag,
+          level: 900,
+        );
+        return;
+      }
 
       // Get ApiService lazily
       final apiService = Get.find<ApiService>();
@@ -51,14 +67,37 @@ class ScreenMonitorService {
       final isBeingMonitored = response.data['is_being_monitored'] ?? false;
       final activeSession = response.data['active_session'];
 
+      developer.log(
+        'Session check result - Being monitored: $isBeingMonitored',
+        name: _tag,
+      );
+
       if (isBeingMonitored && !_isStreaming && activeSession != null) {
         _currentSessionToken = activeSession['session_token'];
+        developer.log(
+          'Starting stream for session: $_currentSessionToken',
+          name: _tag,
+        );
         await startStreaming();
       } else if (!isBeingMonitored && _isStreaming) {
+        developer.log('Stopping stream - no active session', name: _tag);
         stopStreaming();
       }
-    } catch (e) {
-      print('Failed to check active session: $e');
+    } on Exception catch (e) {
+      // Handle 404 dan error lainnya dengan graceful
+      if (e.toString().contains('404')) {
+        developer.log(
+          'No active session found (404) - This is normal',
+          name: _tag,
+        );
+      } else {
+        developer.log(
+          'Failed to check active session',
+          name: _tag,
+          error: e,
+          level: 900,
+        );
+      }
     }
   }
 
@@ -81,14 +120,18 @@ class ScreenMonitorService {
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
+
+      developer.log('Frame sent successfully: $_frameCounter', name: _tag);
     } catch (e) {
-      print('Failed to send frame: $e');
+      developer.log('Failed to send frame', name: _tag, error: e, level: 900);
     }
   }
 
   /// Mulai streaming screenshot
   static Future<void> startStreaming() async {
     if (_isStreaming || _currentSessionToken == null) return;
+
+    developer.log('Stream started', name: _tag);
 
     _isStreaming = true;
     _frameCounter = 0;
@@ -102,6 +145,8 @@ class ScreenMonitorService {
 
   /// Stop streaming
   static void stopStreaming() {
+    developer.log('Stream stopped', name: _tag);
+
     _isStreaming = false;
     _streamTimer?.cancel();
     _currentSessionToken = null;
@@ -112,9 +157,14 @@ class ScreenMonitorService {
     try {
       final captured = await ScreenCapture().captureEntireScreen();
       if (captured == null) return null;
-      return captured.buffer; // ambil data gambar dari object
+      return captured.buffer;
     } catch (e) {
-      print("Failed to capture screenshot: $e");
+      developer.log(
+        "Failed to capture screenshot",
+        name: _tag,
+        error: e,
+        level: 900,
+      );
       return null;
     }
   }

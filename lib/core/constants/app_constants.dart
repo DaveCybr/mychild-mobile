@@ -9,6 +9,7 @@ class AppConstants {
   static const String keyIsPaired = 'is_paired';
   static const String keyParentId = 'parent_id';
   static const String keyAuthToken = 'auth_token';
+  static const String keyPermissionCompleted = 'permission_completed'; // BARU
 
   // Background Service
   static const int locationUpdateInterval = 5; // minutes

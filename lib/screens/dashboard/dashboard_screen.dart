@@ -2,11 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import '../../controllers/background_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/dashboard_controller.dart';
+import '../../services/api/device_service.dart';
 import '../../widgets/dashboard/connection_status_widget.dart';
 import '../../widgets/dashboard/monitoring_status_widget.dart';
 import '../../widgets/common/status_card.dart';
+import '../onboarding/onboarding_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -19,10 +22,27 @@ class _DashboardScreenState extends State<DashboardScreen>
     with WidgetsBindingObserver {
   final DashboardController _controller = Get.put(DashboardController());
 
+  // Di _DashboardScreenState, update initState:
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Initialize BackgroundController DI SINI, bukan di PermissionScreen
+    if (!Get.isRegistered<BackgroundController>()) {
+      Get.put(BackgroundController());
+    }
+
+    // Start semua services setelah dashboard loaded
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) {
+        final bgController = BackgroundController.to;
+        if (!bgController.servicesRunning.value) {
+          bgController.initializeAllServices();
+        }
+      }
+    });
 
     // Show minimal UI notification
     Future.delayed(const Duration(seconds: 2), () {
@@ -47,19 +67,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _controller.checkConnectivity();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
@@ -70,6 +77,34 @@ class _DashboardScreenState extends State<DashboardScreen>
         return false;
       },
       child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Dashboard'),
+          actions: [
+            // Tambahkan menu untuk unpair
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'unpair') {
+                  _showUnpairDialog();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'unpair',
+                  child: Row(
+                    children: [
+                      Icon(Icons.link_off, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text(
+                        'Unpair Device',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         backgroundColor: AppColors.background,
         body: SafeArea(
           child: Column(
@@ -296,5 +331,65 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (level > 50) return AppColors.success;
     if (level > 20) return AppColors.warning;
     return AppColors.error;
+  }
+
+  void _showUnpairDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Unpair Device?'),
+          ],
+        ),
+        content: const Text(
+          'This will disconnect your device from the family. You will need to pair again with a family code.\n\nAre you sure?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Get.back(); // Close dialog
+
+              // Show loading
+              Get.dialog(
+                const Center(child: CircularProgressIndicator()),
+                barrierDismissible: false,
+              );
+
+              // Unpair
+              final deviceService = Get.find<DeviceService>();
+              final success = await deviceService.unpairDevice();
+
+              Get.back(); // Close loading
+
+              if (success) {
+                Get.snackbar(
+                  'Success',
+                  'Device unpaired successfully',
+                  snackPosition: SnackPosition.TOP,
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+
+                // Redirect ke onboarding
+                Get.offAll(() => const OnboardingScreen());
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Failed to unpair device. Please try again.',
+                  snackPosition: SnackPosition.TOP,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: const Text('Unpair', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 }

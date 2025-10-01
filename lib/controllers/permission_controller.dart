@@ -3,8 +3,11 @@ import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'dart:io';
+import 'dart:developer' as developer;
 
 class PermissionController extends GetxController {
+  static const String _tag = 'PermissionController';
+
   final RxBool locationGranted = false.obs;
   final RxBool cameraGranted = false.obs;
   final RxBool notificationGranted = false.obs;
@@ -36,7 +39,14 @@ class PermissionController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    developer.log('PermissionController initialized', name: _tag);
     checkAllPermissions();
+  }
+
+  @override
+  void onClose() {
+    developer.log('PermissionController disposed', name: _tag);
+    super.onClose();
   }
 
   Future<void> checkAllPermissions() async {
@@ -51,20 +61,21 @@ class PermissionController extends GetxController {
           await NotificationListenerService.isPermissionGranted();
       batteryOptimizationDisabled.value =
           await Permission.ignoreBatteryOptimizations.isGranted;
-      // accessibilityGranted.value =
-      //     await Permission.accessibilityFeatures.isGranted;
     } else {
-      // iOS specific checks
-      notificationGranted.value = true; // iOS handles differently
+      notificationGranted.value = true;
       batteryOptimizationDisabled.value = true;
       accessibilityGranted.value = true;
     }
 
     isCheckingPermissions.value = false;
+
+    // Update UI
+    update(['permission_list', 'progress']);
   }
 
   Future<bool> requestLocationPermission() async {
     currentPermissionIndex.value = 0;
+    update(['permission_list', 'progress']);
 
     PermissionStatus status = await Permission.locationAlways.request();
 
@@ -79,11 +90,13 @@ class PermissionController extends GetxController {
     }
 
     locationGranted.value = status.isGranted;
+    update(['permission_list']);
     return status.isGranted;
   }
 
   Future<bool> requestCameraPermission() async {
     currentPermissionIndex.value = 1;
+    update(['permission_list', 'progress']);
 
     PermissionStatus status = await Permission.camera.request();
 
@@ -98,15 +111,18 @@ class PermissionController extends GetxController {
     }
 
     cameraGranted.value = status.isGranted;
+    update(['permission_list']);
     return status.isGranted;
   }
 
   Future<bool> requestNotificationPermission() async {
     currentPermissionIndex.value = 2;
+    update(['permission_list', 'progress']);
 
     if (Platform.isAndroid) {
       bool? granted = await NotificationListenerService.requestPermission();
       notificationGranted.value = granted ?? false;
+      update(['permission_list']);
       return notificationGranted.value;
     }
 
@@ -115,6 +131,7 @@ class PermissionController extends GetxController {
 
   Future<bool> requestStoragePermission() async {
     currentPermissionIndex.value = 3;
+    update(['permission_list', 'progress']);
 
     PermissionStatus status = await Permission.storage.request();
 
@@ -129,34 +146,24 @@ class PermissionController extends GetxController {
     }
 
     storageGranted.value = status.isGranted;
+    update(['permission_list']);
     return status.isGranted;
   }
 
   Future<bool> requestBatteryOptimization() async {
     currentPermissionIndex.value = 4;
+    update(['permission_list', 'progress']);
 
     if (Platform.isAndroid) {
       PermissionStatus status = await Permission.ignoreBatteryOptimizations
           .request();
       batteryOptimizationDisabled.value = status.isGranted;
+      update(['permission_list']);
       return status.isGranted;
     }
 
     return true;
   }
-
-  // Future<bool> requestAccessibilityPermission() async {
-  //   currentPermissionIndex.value = 5;
-
-  //   if (Platform.isAndroid) {
-  //     PermissionStatus status = await Permission.accessibilityFeatures
-  //         .request();
-  //     accessibilityGranted.value = status.isGranted;
-  //     return status.isGranted;
-  //   }
-
-  //   return true;
-  // }
 
   Future<bool> requestAllPermissions() async {
     bool allGranted = true;
@@ -175,8 +182,6 @@ class PermissionController extends GetxController {
 
     if (!await requestBatteryOptimization()) allGranted = false;
     await Future.delayed(const Duration(milliseconds: 500));
-
-    // if (!await requestAccessibilityPermission()) allGranted = false;
 
     return allGranted;
   }
