@@ -65,7 +65,7 @@ class BackgroundApiService {
           )
           .timeout(const Duration(seconds: 10));
 
-      await ServiceLogger.log('Location API: ${response.statusCode}');
+      await ServiceLogger.log('Location API: ${response.body}');
       return response.statusCode == 201;
     } catch (e) {
       await ServiceLogger.log('Location API error: $e');

@@ -36,17 +36,47 @@ class MyNotificationListenerService : NotificationListenerService() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     
+    // Cache device ID untuk performa
+    private var cachedDeviceId: String? = null
+    
     private fun getDeviceId(): String? {
+        // Return cached jika sudah ada
+        if (cachedDeviceId != null && cachedDeviceId!!.isNotEmpty()) {
+            return cachedDeviceId
+        }
+        
         return try {
             val prefs: SharedPreferences = applicationContext.getSharedPreferences(
                 "FlutterSharedPreferences", 
                 Context.MODE_PRIVATE
             )
-            val deviceId = prefs.getString("flutter.device_id", null)
-            Log.e(TAG, "Device ID retrieved: $deviceId")
-            deviceId
+            
+            // PENTING: Gunakan key yang sama dengan Flutter (flutter.device_id)
+            cachedDeviceId = prefs.getString("flutter.device_id", null)
+            
+            if (cachedDeviceId.isNullOrEmpty()) {
+                Log.e(TAG, "❌ Device ID NOT FOUND in SharedPreferences!")
+                Log.e(TAG, "Available keys: ${prefs.all.keys}")
+                
+                // Coba ambil dari device info sebagai fallback
+                cachedDeviceId = android.provider.Settings.Secure.getString(
+                    applicationContext.contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID
+                )
+                
+                if (!cachedDeviceId.isNullOrEmpty()) {
+                    // Save ke SharedPreferences untuk next time
+                    prefs.edit().putString("flutter.device_id", cachedDeviceId).apply()
+                    prefs.edit().putBoolean("flutter.is_paired", true).apply()
+                    Log.e(TAG, "✅ Device ID generated from Android ID: $cachedDeviceId")
+                }
+            } else {
+                Log.e(TAG, "✅ Device ID retrieved from SharedPreferences: $cachedDeviceId")
+            }
+            
+            cachedDeviceId
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting device ID", e)
+            Log.e(TAG, "❌ Error getting device ID", e)
             null
         }
     }
@@ -55,7 +85,11 @@ class MyNotificationListenerService : NotificationListenerService() {
         super.onCreate()
         Log.e(TAG, "========================================")
         Log.e(TAG, "SERVICE CREATED")
-        Log.e(TAG, "Device ID: ${getDeviceId()}")
+        
+        // Pre-load device ID saat service dibuat
+        val deviceId = getDeviceId()
+        Log.e(TAG, "Device ID: $deviceId")
+        Log.e(TAG, "Device ID is ${if (deviceId.isNullOrEmpty()) "EMPTY/NULL" else "OK"}")
         Log.e(TAG, "MethodChannel: ${methodChannel != null}")
         Log.e(TAG, "========================================")
     }
@@ -64,13 +98,22 @@ class MyNotificationListenerService : NotificationListenerService() {
         super.onListenerConnected()
         Log.e(TAG, "========================================")
         Log.e(TAG, "LISTENER CONNECTED")
-        Log.e(TAG, "Device ID: ${getDeviceId()}")
+        
+        val deviceId = getDeviceId()
+        Log.e(TAG, "Device ID on connect: $deviceId")
+        
+        if (deviceId.isNullOrEmpty()) {
+            Log.e(TAG, "⚠️ WARNING: Device ID is NULL/EMPTY - notifications will NOT be sent!")
+        }
+        
         Log.e(TAG, "========================================")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.e(TAG, "LISTENER DISCONNECTED")
+        // Clear cache
+        cachedDeviceId = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -156,12 +199,13 @@ class MyNotificationListenerService : NotificationListenerService() {
                 Log.e(TAG, "=== SENDING TO SERVER ===")
                 
                 val deviceId = getDeviceId()
-                if (deviceId == null || deviceId.isEmpty()) {
-                    Log.e(TAG, "ERROR: Device ID is NULL or EMPTY")
+                if (deviceId.isNullOrEmpty()) {
+                    Log.e(TAG, "❌ CRITICAL ERROR: Device ID is NULL or EMPTY")
+                    Log.e(TAG, "❌ Cannot send notification without Device ID")
                     return@launch
                 }
                 
-                Log.e(TAG, "Device ID: $deviceId")
+                Log.e(TAG, "✅ Device ID: $deviceId")
                 Log.e(TAG, "App Name: $appName")
                 Log.e(TAG, "Title: $title")
                 Log.e(TAG, "Content: $content")
