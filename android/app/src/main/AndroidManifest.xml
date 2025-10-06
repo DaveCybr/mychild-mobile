@@ -2,7 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.couple_guard_child">
 
-    <!-- Permissions tetap sama -->
+    <!-- Permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/> 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/> 
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
@@ -17,12 +17,17 @@
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- TAMBAHAN: Agar service tidak dibunuh sistem -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     
     <application
         android:label="couple_guard_child"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true"> <!-- TAMBAHKAN INI -->
+        android:enableOnBackInvokedCallback="true"
+        android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
@@ -44,19 +49,22 @@
             </intent-filter>
         </activity>
 
-        <!-- Background Service -->
+        <!-- Background Service - PENTING: android:stopWithTask="false" -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
             android:exported="false"
-            tools:replace="android:exported"
+            android:stopWithTask="false"
+            tools:replace="android:exported,android:stopWithTask"
             android:foregroundServiceType="location|mediaProjection|connectedDevice" />
         
+        <!-- Notification Listener Service -->
         <service 
             android:name=".services.background.MyNotificationListenerService"
             android:label="Family Safety Listener" 
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" 
-            android:exported="true"> 
+            android:exported="true"
+            android:stopWithTask="false"> 
             <intent-filter> 
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter> 

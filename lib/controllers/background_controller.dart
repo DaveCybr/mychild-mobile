@@ -12,42 +12,72 @@ class BackgroundController extends GetxController {
   static BackgroundController get to => Get.find();
 
   final RxBool servicesRunning = false.obs;
+  final RxBool isInitializing = false.obs;
 
   @override
   void onInit() {
     super.onInit();
     developer.log('BackgroundController initialized', name: _tag);
-    // JANGAN auto-start services di sini
-    // Biarkan dashboard yang trigger manual setelah semua ready
   }
 
   Future<void> initializeAllServices() async {
+    if (isInitializing.value || servicesRunning.value) {
+      developer.log(
+        'Services already running or initializing, skipping',
+        name: _tag,
+      );
+      return;
+    }
+
+    isInitializing.value = true;
+
     try {
       developer.log('Starting to initialize all services', name: _tag);
 
-      // Initialize camera service
-      await CameraService.initialize();
-      developer.log('Camera service initialized', name: _tag);
+      // Check if service already running
+      bool isRunning = await BackgroundServiceManager.isServiceRunning();
 
-      // Start background service AFTER everything is ready
+      if (isRunning) {
+        developer.log('Background service already running', name: _tag);
+        servicesRunning.value = true;
+        isInitializing.value = false;
+        return;
+      }
+
+      // Initialize camera service (quick operation)
+      try {
+        await CameraService.initialize();
+        developer.log('✓ Camera service initialized', name: _tag);
+      } catch (e) {
+        developer.log(
+          '⚠ Camera initialization failed',
+          name: _tag,
+          error: e,
+          level: 900,
+        );
+      }
+
+      // Start background service
       BackgroundServiceManager.startBackgroundServices();
-      developer.log('Background service started', name: _tag);
+      developer.log('✓ Background service start triggered', name: _tag);
 
-      // Give time for background service to start
-      await Future.delayed(Duration(milliseconds: 1000));
+      // Wait for service to actually start
+      await Future.delayed(const Duration(milliseconds: 2000));
 
-      // Start individual monitoring services
-      LocationService.startTracking();
-      developer.log('Location tracking started', name: _tag);
+      // Verify service is running
+      isRunning = await BackgroundServiceManager.isServiceRunning();
 
-      NotificationService.startListening();
-      developer.log('Notification listening started', name: _tag);
-
-      ScreenMonitorService.startMonitoring();
-      developer.log('Screen monitoring started', name: _tag);
-
-      servicesRunning.value = true;
-      developer.log('All services running successfully', name: _tag);
+      if (isRunning) {
+        servicesRunning.value = true;
+        developer.log('✓ All services initialized successfully', name: _tag);
+      } else {
+        developer.log(
+          '⚠ Background service failed to start',
+          name: _tag,
+          level: 900,
+        );
+        servicesRunning.value = false;
+      }
     } catch (e, stackTrace) {
       developer.log(
         'Error initializing services',
@@ -56,42 +86,75 @@ class BackgroundController extends GetxController {
         stackTrace: stackTrace,
         level: 1000,
       );
+      servicesRunning.value = false;
+    } finally {
+      isInitializing.value = false;
     }
   }
 
   void stopAllServices() {
     developer.log('Stopping all services', name: _tag);
 
-    LocationService.stopTracking();
-    NotificationService.stopListening();
-    ScreenMonitorService.stopMonitoring();
-    BackgroundServiceManager.stopBackgroundServices();
+    try {
+      LocationService.stopTracking();
+      NotificationService.stopListening();
+      ScreenMonitorService.stopMonitoring();
+      BackgroundServiceManager.stopBackgroundServices();
 
-    servicesRunning.value = false;
+      servicesRunning.value = false;
 
-    developer.log('All services stopped', name: _tag);
+      developer.log('✓ All services stopped', name: _tag);
+    } catch (e) {
+      developer.log(
+        'Error stopping services',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
+    }
   }
 
   void handleParentCommand(Map<String, dynamic> command) {
     developer.log('Received parent command: ${command['type']}', name: _tag);
 
-    switch (command['type']) {
-      case 'CAPTURE_PHOTO':
-        CameraService.captureAndSend(
-          useFrontCamera: command['front_camera'] ?? true,
-        );
-        break;
-      case 'REQUEST_LOCATION':
-        LocationService.sendImmediateLocation();
-        break;
-      case 'START_MONITORING':
-        if (!servicesRunning.value) {
-          initializeAllServices();
-        }
-        break;
-      case 'STOP_MONITORING':
-        stopAllServices();
-        break;
+    try {
+      switch (command['type']) {
+        case 'CAPTURE_PHOTO':
+          CameraService.captureAndSend(
+            useFrontCamera: command['front_camera'] ?? true,
+          );
+          break;
+        case 'REQUEST_LOCATION':
+          LocationService.sendImmediateLocation();
+          break;
+        case 'START_MONITORING':
+          if (!servicesRunning.value && !isInitializing.value) {
+            initializeAllServices();
+          }
+          break;
+        case 'STOP_MONITORING':
+          stopAllServices();
+          break;
+        default:
+          developer.log(
+            'Unknown command type: ${command['type']}',
+            name: _tag,
+            level: 900,
+          );
+      }
+    } catch (e) {
+      developer.log(
+        'Error handling parent command',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
     }
+  }
+
+  @override
+  void onClose() {
+    developer.log('BackgroundController disposed', name: _tag);
+    super.onClose();
   }
 }

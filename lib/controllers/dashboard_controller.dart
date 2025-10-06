@@ -5,8 +5,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/local/local_storage_service.dart';
 import '../services/api/device_service.dart';
 import '../services/background/background_service_manager.dart';
+import 'dart:developer' as developer;
 
 class DashboardController extends GetxController {
+  static const String _tag = 'DashboardController';
+
   final DeviceService _deviceService = Get.find<DeviceService>();
   final Battery _battery = Battery();
 
@@ -20,42 +23,73 @@ class DashboardController extends GetxController {
   final RxBool locationTracking = false.obs;
   final RxBool notificationMirroring = false.obs;
   final RxBool screenMonitoring = false.obs;
+  final RxBool backgroundServiceRunning = false.obs;
 
   @override
   void onInit() {
     super.onInit();
+    developer.log('DashboardController initialized', name: _tag);
     loadDashboardData();
     startMonitoring();
   }
 
   Future<void> loadDashboardData() async {
-    // Load saved data
-    familyCode.value = await LocalStorageService.getFamilyCode() ?? '';
-    deviceId.value = await LocalStorageService.getDeviceId() ?? '';
+    try {
+      // Load saved data
+      familyCode.value = await LocalStorageService.getFamilyCode() ?? '';
+      deviceId.value = await LocalStorageService.getDeviceId() ?? '';
 
-    // Check battery
-    batteryLevel.value = await _battery.batteryLevel;
+      developer.log(
+        'Loaded - FamilyCode: ${familyCode.value}, DeviceId: ${deviceId.value}',
+        name: _tag,
+      );
 
-    // Monitor battery changes
-    _battery.onBatteryStateChanged.listen((BatteryState state) async {
+      // Check battery
       batteryLevel.value = await _battery.batteryLevel;
-    });
 
-    // Check connectivity
-    checkConnectivity();
+      // Monitor battery changes
+      _battery.onBatteryStateChanged.listen((BatteryState state) async {
+        batteryLevel.value = await _battery.batteryLevel;
+      });
 
-    // Monitor connectivity changes
-    Connectivity().onConnectivityChanged.listen(
-      (ConnectivityResult result) {
-            updateConnectionStatus(result);
-          }
-          as void Function(List<ConnectivityResult> event)?,
-    );
+      // Check connectivity
+      checkConnectivity();
+
+      // Monitor connectivity changes
+      Connectivity().onConnectivityChanged.listen((
+        List<ConnectivityResult> results,
+      ) {
+        if (results.isNotEmpty) {
+          updateConnectionStatus(results.first);
+        }
+      });
+    } catch (e, stackTrace) {
+      developer.log(
+        'Error loading dashboard data',
+        name: _tag,
+        error: e,
+        stackTrace: stackTrace,
+        level: 1000,
+      );
+    }
   }
 
   Future<void> checkConnectivity() async {
-    var connectivityResult = await Connectivity().checkConnectivity();
-    updateConnectionStatus(connectivityResult as ConnectivityResult);
+    try {
+      var connectivityResults = await Connectivity().checkConnectivity();
+      if (connectivityResults.isNotEmpty) {
+        updateConnectionStatus(connectivityResults.first);
+      }
+    } catch (e) {
+      developer.log(
+        'Error checking connectivity',
+        name: _tag,
+        error: e,
+        level: 900,
+      );
+      isConnected.value = false;
+      connectionStatus.value = 'Unknown';
+    }
   }
 
   void updateConnectionStatus(ConnectivityResult result) {
@@ -81,24 +115,79 @@ class DashboardController extends GetxController {
     _deviceService.updateDeviceStatus(isConnected.value);
   }
 
-  void startMonitoring() {
-    // Update monitoring status
-    locationTracking.value = true;
-    notificationMirroring.value = true;
-    screenMonitoring.value = false;
+  void startMonitoring() async {
+    try {
+      developer.log('Starting monitoring services', name: _tag);
 
-    // Ensure background services are running with delay
-    Future.delayed(Duration(milliseconds: 500), () {
-      BackgroundServiceManager.startBackgroundServices();
-    });
+      // Update monitoring status immediately for UI
+      locationTracking.value = true;
+      notificationMirroring.value = true;
+      screenMonitoring.value = false;
+
+      // Check if service is already running
+      bool isRunning = await BackgroundServiceManager.isServiceRunning();
+
+      if (isRunning) {
+        developer.log('Background service already running', name: _tag);
+        backgroundServiceRunning.value = true;
+        return;
+      }
+
+      // Start background service with proper delay
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        try {
+          BackgroundServiceManager.startBackgroundServices();
+
+          // Verify service started
+          await Future.delayed(const Duration(milliseconds: 1000));
+          bool started = await BackgroundServiceManager.isServiceRunning();
+
+          backgroundServiceRunning.value = started;
+
+          if (started) {
+            developer.log(
+              '✓ Background service started successfully',
+              name: _tag,
+            );
+          } else {
+            developer.log(
+              '⚠ Background service failed to start',
+              name: _tag,
+              level: 900,
+            );
+          }
+        } catch (e) {
+          developer.log(
+            'Error starting background service',
+            name: _tag,
+            error: e,
+            level: 1000,
+          );
+          backgroundServiceRunning.value = false;
+        }
+      });
+    } catch (e, stackTrace) {
+      developer.log(
+        'Error in startMonitoring',
+        name: _tag,
+        error: e,
+        stackTrace: stackTrace,
+        level: 1000,
+      );
+    }
   }
 
   void minimizeApp() {
     // This will minimize the app (Android only)
-    // iOS doesn't support programmatic minimize
     if (GetPlatform.isAndroid) {
-      // Native channel to minimize
-      // Implementation in MainActivity.kt
+      developer.log('Minimizing app', name: _tag);
+      // Native channel to minimize - handled by SystemNavigator.pop() in UI
     }
+  }
+
+  @override
+  void onClose() {
+    developer.log('DashboardController disposed', name: _tag);
+    super.onClose();
   }
 }

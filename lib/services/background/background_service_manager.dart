@@ -16,7 +16,7 @@ class BackgroundServiceManager {
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
-        autoStart: false, // Changed to false - start manually
+        autoStart: false,
         isForegroundMode: true,
         notificationChannelId: 'child_app_background',
         initialNotificationTitle: 'Family Safety',
@@ -24,7 +24,7 @@ class BackgroundServiceManager {
         foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(
-        autoStart: false, // Changed to false
+        autoStart: false,
         onForeground: onStart,
         onBackground: onIosBackground,
       ),
@@ -33,15 +33,21 @@ class BackgroundServiceManager {
 
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) {
-    // STEP 1: Set foreground IMMEDIATELY
-    if (service is AndroidServiceInstance) {
-      service.setAsForegroundService();
-    }
-
-    // STEP 2: Register plugins
+    // CRITICAL: Set foreground IMMEDIATELY before any async operations
     DartPluginRegistrant.ensureInitialized();
 
-    // STEP 3: Setup event listeners
+    if (service is AndroidServiceInstance) {
+      // Call startForeground IMMEDIATELY (within 5 seconds requirement)
+      service.setAsForegroundService();
+
+      // Set initial notification right away
+      service.setForegroundNotificationInfo(
+        title: "Family Safety",
+        content: "Starting monitoring services...",
+      );
+    }
+
+    // Setup event listeners
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
@@ -53,30 +59,70 @@ class BackgroundServiceManager {
     }
 
     service.on('stopService').listen((event) {
+      LocationService.stopTracking();
+      NotificationService.stopListening();
+      ScreenMonitorService.stopMonitoring();
       service.stopSelf();
     });
 
-    // STEP 4: Initialize async work
-    Future.microtask(() => _initializeAsync(service));
+    // Now do async initialization in background
+    _initializeAsync(service).catchError((error) {
+      print('Background service initialization error: $error');
+      // Keep service running even if initialization fails
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: "Family Safety",
+          content: "Service running (initialization failed)",
+        );
+      }
+    });
   }
 
   static Future<void> _initializeAsync(ServiceInstance service) async {
     try {
+      // Initialize local storage
       await LocalStorageService.init();
+
       final isPaired = await LocalStorageService.getIsPaired();
 
+      // Update notification after checking pairing status
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: isPaired ? "Monitoring active" : "Ready",
+          content: isPaired ? "Monitoring active" : "Ready to pair",
         );
       }
 
       if (isPaired) {
-        // Start monitoring services
-        LocationService.startTracking();
-        NotificationService.startListening();
-        ScreenMonitorService.startMonitoring();
+        // Start monitoring services with error handling
+        try {
+          LocationService.startTracking();
+          print('✓ Location tracking started');
+        } catch (e) {
+          print('Failed to start location tracking: $e');
+        }
+
+        try {
+          NotificationService.startListening();
+          print('✓ Notification listening started');
+        } catch (e) {
+          print('Failed to start notification listening: $e');
+        }
+
+        try {
+          ScreenMonitorService.startMonitoring();
+          print('✓ Screen monitoring started');
+        } catch (e) {
+          print('Failed to start screen monitoring: $e');
+        }
+
+        // Update notification when all services started
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: "Family Safety Active",
+            content: "All monitoring services running",
+          );
+        }
 
         // Keep alive timer
         Timer.periodic(const Duration(seconds: 30), (timer) async {
@@ -98,6 +144,7 @@ class BackgroundServiceManager {
       }
     } catch (e) {
       print('Background service initialization error: $e');
+      // Still show service is running
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
           title: "Family Safety",
@@ -115,12 +162,33 @@ class BackgroundServiceManager {
 
   // Call this AFTER pairing is complete
   static void startBackgroundServices() {
-    final service = FlutterBackgroundService();
-    service.startService();
+    try {
+      final service = FlutterBackgroundService();
+      service.startService();
+      print('✓ Background service started');
+    } catch (e) {
+      print('Failed to start background service: $e');
+    }
   }
 
   static void stopBackgroundServices() {
-    final service = FlutterBackgroundService();
-    service.invoke("stopService");
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke("stopService");
+      print('✓ Background service stopped');
+    } catch (e) {
+      print('Failed to stop background service: $e');
+    }
+  }
+
+  // Check if service is running
+  static Future<bool> isServiceRunning() async {
+    try {
+      final service = FlutterBackgroundService();
+      return await service.isRunning();
+    } catch (e) {
+      print('Failed to check service status: $e');
+      return false;
+    }
   }
 }
