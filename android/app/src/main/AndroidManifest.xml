@@ -20,6 +20,12 @@
     <!-- TAMBAHAN: Agar service tidak dibunuh sistem -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Android 14+ requirement -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" 
+        android:minSdkVersion="34"/>
+
     
     <application
         android:label="couple_guard_child"
@@ -50,24 +56,36 @@
         </activity>
 
         <!-- Background Service - PENTING: android:stopWithTask="false" -->
-        <service
+         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="false"
             tools:replace="android:exported,android:stopWithTask"
-            android:foregroundServiceType="location|mediaProjection|connectedDevice" />
+            android:foregroundServiceType="location|specialUse|dataSync" />
         
+        <!-- Boot Receiver -->
+        <receiver 
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
         <!-- Notification Listener Service -->
         <service 
             android:name=".services.background.MyNotificationListenerService"
-            android:label="Family Safety Listener" 
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" 
+            android:label="Family Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true"
-            android:stopWithTask="false"> 
-            <intent-filter> 
+            android:stopWithTask="false">
+            <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter> 
+            </intent-filter>
         </service>
 
         <meta-data

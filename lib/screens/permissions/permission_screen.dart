@@ -1,8 +1,11 @@
 // screens/permissions/permission_screen.dart
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/permission_controller.dart';
+import '../../services/background/background_service_manager.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -14,7 +17,8 @@ class PermissionScreen extends StatefulWidget {
   State<PermissionScreen> createState() => _PermissionScreenState();
 }
 
-class _PermissionScreenState extends State<PermissionScreen> {
+class _PermissionScreenState extends State<PermissionScreen>
+    with WidgetsBindingObserver {
   // Use Get.put with permanent: false to ensure proper lifecycle
   late final PermissionController _controller;
 
@@ -32,14 +36,52 @@ class _PermissionScreenState extends State<PermissionScreen> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Recheck permissions when returning from Settings
+      _controller.checkAllPermissions();
+    }
+  }
+
   Future<void> _requestNextPermission() async {
     final index = _controller.currentPermissionIndex.value;
 
     if (index >= _controller.permissionTitles.length) {
-      // PENTING: Simpan status permission selesai
+      // ✅ PENTING: Simpan status permission selesai
       await LocalStorageService.setPermissionCompleted(true);
 
-      // Semua permission selesai, ke dashboard
+      // ✅ START SERVICE IMMEDIATELY SEBELUM KE DASHBOARD
+      developer.log('🚀 Starting background service from permission screen');
+
+      try {
+        // Pastikan service sudah configured
+        await BackgroundServiceManager.initializeService();
+
+        // Start service
+        BackgroundServiceManager.startBackgroundServices();
+
+        // Tunggu sebentar untuk memastikan service running
+        await Future.delayed(const Duration(milliseconds: 1500));
+
+        final isRunning = await BackgroundServiceManager.isServiceRunning();
+        developer.log('Service running status: $isRunning');
+
+        if (isRunning) {
+          Get.snackbar(
+            'All Set!',
+            'Background monitoring is now active',
+            snackPosition: SnackPosition.TOP,
+            backgroundColor: AppColors.success,
+            colorText: AppColors.white,
+            duration: const Duration(seconds: 2),
+          );
+        }
+      } catch (e) {
+        developer.log('Failed to start service', error: e);
+      }
+
+      // Navigate to dashboard
       if (mounted) {
         Get.offAll(() => const DashboardScreen());
       }

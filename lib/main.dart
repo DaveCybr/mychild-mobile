@@ -1,49 +1,35 @@
-import 'package:couple_guard_child/core/bindings/initial_binding.dart';
+import 'package:couple_guard_child/test_notif_listenet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
-import 'core/themes/app_theme.dart';
-import 'services/background/background_service_manager.dart';
-import 'services/local/local_storage_service.dart';
-import 'screens/splash/splash_screen.dart';
+import 'test_simple_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize local storage first
-  await LocalStorageService.init();
+  // Initialize notification listener
+  await NotificationListenerService.init();
 
-  // IMPORTANT: Only CONFIGURE service, don't start yet
-  await BackgroundServiceManager.initializeService();
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  // Lock orientation to portrait
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  print('');
+  print('========================================');
+  print('APP STARTING - CLEAN TEST');
+  print('========================================');
+  print('');
 
-  // Set system UI overlay style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-
-  runApp(const ChildApp());
+  runApp(const TestApp());
 }
 
-class ChildApp extends StatelessWidget {
-  const ChildApp({super.key});
+class TestApp extends StatelessWidget {
+  const TestApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'Family Safety',
+    return MaterialApp(
+      title: 'Service Test',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      initialBinding: InitialBinding(),
-      home: const SplashScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const SimpleServiceTest(),
     );
   }
 }

@@ -29,6 +29,7 @@ class ApiService extends getx.GetxService {
         },
       ),
     );
+    _dio.interceptors.add(RetryInterceptor(dio: _dio));
 
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -191,7 +192,6 @@ class ApiService extends getx.GetxService {
   }
 
   Dio get dio => _dio;
-
   // Generic request methods
   Future<Response> get(String path, {Map<String, dynamic>? params}) async {
     try {
@@ -239,5 +239,59 @@ class ApiService extends getx.GetxService {
       );
       rethrow;
     }
+  }
+}
+
+class RetryInterceptor extends Interceptor {
+  final Dio dio;
+  final int maxRetries;
+  final Duration retryDelay;
+
+  RetryInterceptor({
+    required this.dio,
+    this.maxRetries = 3,
+    this.retryDelay = const Duration(seconds: 2),
+  });
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (_shouldRetry(err) && err.requestOptions.extra['retryCount'] != null) {
+      final retryCount = err.requestOptions.extra['retryCount'] as int;
+
+      if (retryCount < maxRetries) {
+        developer.log(
+          'Retrying request (${retryCount + 1}/$maxRetries): ${err.requestOptions.path}',
+          name: 'RetryInterceptor',
+        );
+
+        await Future.delayed(retryDelay * (retryCount + 1));
+
+        try {
+          final options = err.requestOptions;
+          options.extra['retryCount'] = retryCount + 1;
+
+          final response = await dio.fetch(options);
+          return handler.resolve(response);
+        } catch (e) {
+          return super.onError(err, handler);
+        }
+      }
+    }
+
+    return super.onError(err, handler);
+  }
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra['retryCount'] ??= 0;
+    return super.onRequest(options, handler);
+  }
+
+  bool _shouldRetry(DioException err) {
+    return err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.sendTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.connectionError ||
+        (err.response?.statusCode != null && err.response!.statusCode! >= 500);
   }
 }

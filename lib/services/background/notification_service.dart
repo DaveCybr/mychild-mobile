@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:get/get.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
@@ -7,24 +9,26 @@ import '../local/local_storage_service.dart';
 
 class NotificationService {
   static bool _isListening = false;
-
   static Future<void> startListening() async {
     if (_isListening) return;
 
-    // Check permission
+    // Check permission but DO NOT request from background
     bool hasPermission =
         await NotificationListenerService.isPermissionGranted();
     if (!hasPermission) {
-      await NotificationListenerService.requestPermission();
+      // Jangan memanggil requestPermission() dari service in background.
+      developer.log(
+        'Notification permission not granted, skipping listener setup',
+        name: 'NotificationService',
+      );
       return;
     }
 
     _isListening = true;
 
-    // Start listening
+    // Start listening (non-blocking)
     NotificationListenerService.notificationsStream.listen((event) async {
       if (event.packageName == 'com.example.couple_guard_child') return;
-
       await _sendNotification(event);
     });
   }

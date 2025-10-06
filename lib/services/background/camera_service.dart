@@ -9,6 +9,7 @@ import '../local/local_storage_service.dart';
 class CameraService {
   static List<CameraDescription>? _cameras;
   static CameraController? _controller;
+  static bool _isCapturing = false; // Prevent concurrent captures
 
   static Future<void> initialize() async {
     try {
@@ -19,13 +20,30 @@ class CameraService {
   }
 
   static Future<void> captureAndSend({bool useFrontCamera = true}) async {
-    if (_cameras == null || _cameras!.isEmpty) {
-      await initialize();
-      if (_cameras == null || _cameras!.isEmpty) return;
+    // Prevent concurrent captures
+    if (_isCapturing) {
+      print('Camera capture already in progress');
+      return;
     }
 
+    _isCapturing = true;
+
     try {
-      // Select camera
+      if (_cameras == null || _cameras!.isEmpty) {
+        await initialize();
+        if (_cameras == null || _cameras!.isEmpty) {
+          print('No cameras available');
+          return;
+        }
+      }
+
+      // Dispose existing controller first
+      if (_controller != null) {
+        await _controller!.dispose();
+        _controller = null;
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
       final camera = _cameras!.firstWhere(
         (camera) =>
             camera.lensDirection ==
@@ -35,37 +53,46 @@ class CameraService {
         orElse: () => _cameras!.first,
       );
 
-      // Initialize controller
       _controller = CameraController(
         camera,
         ResolutionPreset.medium,
         enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
       );
 
       await _controller!.initialize();
 
-      // Take picture
+      // Small delay to ensure camera is ready
+      await Future.delayed(const Duration(milliseconds: 300));
+
       final XFile image = await _controller!.takePicture();
 
-      // Send to API
       await _sendCameraCapture(image);
-
-      // Dispose controller
-      await _controller!.dispose();
-      _controller = null;
     } catch (e) {
-      print('Failed to capture and send: $e');
-      _controller?.dispose();
-      _controller = null;
+      print('Failed to capture: $e');
+    } finally {
+      // Always cleanup
+      try {
+        await _controller?.dispose();
+        _controller = null;
+      } catch (e) {
+        print('Failed to dispose camera: $e');
+      }
+      _isCapturing = false;
     }
   }
 
   static Future<void> _sendCameraCapture(XFile image) async {
+    File? imageFile;
     try {
-      final childId = await LocalStorageService.getChildId();
-      if (childId == null) return;
+      imageFile = File(image.path);
 
-      // Get ApiService lazily and initialize
+      final childId = await LocalStorageService.getChildId();
+      if (childId == null) {
+        print('Child ID not found');
+        return;
+      }
+
       final apiService = Get.find<ApiService>();
 
       FormData formData = FormData.fromMap({
@@ -77,12 +104,25 @@ class CameraService {
         ),
       });
 
-      await apiService.dio.post(ApiEndpoints.sendCameraCapture, data: formData);
+      final response = await apiService.dio.post(
+        ApiEndpoints.sendCameraCapture,
+        data: formData,
+      );
 
-      // Delete local file
-      File(image.path).deleteSync();
+      if (response.statusCode == 200) {
+        print('✓ Camera capture sent successfully');
+      }
     } catch (e) {
       print('Failed to send camera capture: $e');
+    } finally {
+      // Always delete temp file
+      try {
+        if (imageFile != null && await imageFile.exists()) {
+          await imageFile.delete();
+        }
+      } catch (e) {
+        print('Failed to delete temp file: $e');
+      }
     }
   }
 }

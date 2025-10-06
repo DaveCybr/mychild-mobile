@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/background/background_service_manager.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../services/api/device_service.dart';
 import '../onboarding/onboarding_screen.dart';
@@ -49,75 +50,68 @@ class _SplashScreenState extends State<SplashScreen>
 
     developer.log('Starting app status check', name: _tag);
 
-    // Step 1: Cek local storage dulu
-    // final isPairedLocal = await LocalStorageService.getIsPaired();
-
-    // developer.log('Local pairing status: $isPairedLocal', name: _tag);
-
-    // if (!isPairedLocal) {
-    //   // Belum pernah pairing -> Onboarding
-    //   developer.log('Not paired locally, go to onboarding', name: _tag);
-    //   Get.offAll(() => const OnboardingScreen());
-    //   return;
-    // }
-
-    // Step 2: Verify dengan server
     try {
       final deviceService = Get.find<DeviceService>();
       final serverData = await deviceService.verifyPairing();
 
       if (serverData == null) {
-        // Data local ada, tapi server tidak ada (mungkin di-unpair dari parent)
-        developer.log(
-          'Local says paired, but server says not paired. Clearing local data.',
-          name: _tag,
-          level: 900,
-        );
-
+        developer.log('Not paired, clearing local data', name: _tag);
         await LocalStorageService.clearPairing();
 
         Get.snackbar(
           'Device Unpaired',
-          'This device has been unpaired. Please pair again.',
+          'Please pair again.',
           snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.orange,
           colorText: Colors.white,
-          duration: const Duration(seconds: 4),
         );
 
         Get.offAll(() => const OnboardingScreen());
         return;
       }
 
-      developer.log(
-        'Server verification successful, device is paired',
-        name: _tag,
-      );
+      developer.log('Server verification successful', name: _tag);
 
-      // Step 3: Cek permission status
       final isPermissionCompleted =
           await LocalStorageService.isPermissionCompleted();
 
-      developer.log('Permission completed: $isPermissionCompleted', name: _tag);
-
       if (!isPermissionCompleted) {
-        // Sudah pairing tapi belum setup permission
+        // Belum setup permission
         Get.offAll(() => const PermissionScreen());
         return;
       }
 
-      // Semua OK -> Dashboard
-      Get.offAll(() => const DashboardScreen());
-    } catch (e) {
+      // ✅ Permission sudah selesai, check service
       developer.log(
-        'Error during server verification',
+        'Permission completed, checking service status',
         name: _tag,
-        error: e,
-        level: 1000,
       );
 
-      // Kalau ada error network, tetap lanjut berdasarkan local data
-      developer.log('Network error, using local data', name: _tag, level: 900);
+      final isServiceRunning =
+          await BackgroundServiceManager.isServiceRunning();
+      developer.log('Service running: $isServiceRunning', name: _tag);
+
+      if (!isServiceRunning) {
+        // ✅ Service belum running, start sekarang
+        developer.log('Starting service from splash', name: _tag);
+
+        try {
+          await BackgroundServiceManager.initializeService();
+          BackgroundServiceManager.startBackgroundServices();
+
+          await Future.delayed(const Duration(milliseconds: 1500));
+
+          final started = await BackgroundServiceManager.isServiceRunning();
+          developer.log('Service started: $started', name: _tag);
+        } catch (e) {
+          developer.log('Failed to start service', name: _tag, error: e);
+        }
+      }
+
+      // Go to dashboard
+      Get.offAll(() => const DashboardScreen());
+    } catch (e) {
+      developer.log('Error during verification', name: _tag, error: e);
 
       final isPermissionCompleted =
           await LocalStorageService.isPermissionCompleted();

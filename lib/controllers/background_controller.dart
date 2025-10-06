@@ -22,65 +22,52 @@ class BackgroundController extends GetxController {
 
   Future<void> initializeAllServices() async {
     if (isInitializing.value || servicesRunning.value) {
-      developer.log(
-        'Services already running or initializing, skipping',
-        name: _tag,
-      );
+      developer.log('Services already initialized', name: _tag);
       return;
     }
 
     isInitializing.value = true;
 
     try {
-      developer.log('Starting to initialize all services', name: _tag);
+      developer.log('🚀 Initializing services', name: _tag);
 
-      // Check if service already running
+      // Check current status
       bool isRunning = await BackgroundServiceManager.isServiceRunning();
 
       if (isRunning) {
-        developer.log('Background service already running', name: _tag);
+        developer.log('✓ Service already running', name: _tag);
         servicesRunning.value = true;
         isInitializing.value = false;
         return;
       }
 
-      // Initialize camera service (quick operation)
+      // Initialize camera (quick)
       try {
         await CameraService.initialize();
-        developer.log('✓ Camera service initialized', name: _tag);
+        developer.log('✓ Camera initialized', name: _tag);
       } catch (e) {
-        developer.log(
-          '⚠ Camera initialization failed',
-          name: _tag,
-          error: e,
-          level: 900,
-        );
+        developer.log('Camera init failed', name: _tag, error: e);
       }
 
-      // Start background service
+      // ✅ Start service
+      developer.log('Starting background service', name: _tag);
       BackgroundServiceManager.startBackgroundServices();
-      developer.log('✓ Background service start triggered', name: _tag);
 
-      // Wait for service to actually start
-      await Future.delayed(const Duration(milliseconds: 2000));
+      // ✅ Wait reasonable time
+      await Future.delayed(const Duration(milliseconds: 1500));
 
-      // Verify service is running
+      // Verify
       isRunning = await BackgroundServiceManager.isServiceRunning();
+      servicesRunning.value = isRunning;
 
       if (isRunning) {
-        servicesRunning.value = true;
-        developer.log('✓ All services initialized successfully', name: _tag);
+        developer.log('✅ Services started successfully', name: _tag);
       } else {
-        developer.log(
-          '⚠ Background service failed to start',
-          name: _tag,
-          level: 900,
-        );
-        servicesRunning.value = false;
+        developer.log('❌ Service failed to start', name: _tag, level: 900);
       }
     } catch (e, stackTrace) {
       developer.log(
-        'Error initializing services',
+        '❌ Error initializing services',
         name: _tag,
         error: e,
         stackTrace: stackTrace,

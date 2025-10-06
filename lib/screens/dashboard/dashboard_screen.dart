@@ -1,4 +1,6 @@
 // screens/dashboard/dashboard_screen.dart
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -6,6 +8,7 @@ import '../../controllers/background_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/dashboard_controller.dart';
 import '../../services/api/device_service.dart';
+import '../../services/background/background_service_manager.dart';
 import '../../widgets/dashboard/connection_status_widget.dart';
 import '../../widgets/dashboard/monitoring_status_widget.dart';
 import '../../widgets/common/status_card.dart';
@@ -29,37 +32,46 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Initialize BackgroundController DI SINI, bukan di PermissionScreen
-    if (!Get.isRegistered<BackgroundController>()) {
-      Get.put(BackgroundController());
-    }
-
-    // Start semua services setelah dashboard loaded
-    Future.delayed(const Duration(milliseconds: 1000), () {
+    // ✅ HANYA CHECK status, JANGAN start service lagi
+    Future.delayed(const Duration(milliseconds: 500), () async {
       if (mounted) {
-        final bgController = BackgroundController.to;
-        if (!bgController.servicesRunning.value) {
-          bgController.initializeAllServices();
+        // Check if service is already running
+        final isRunning = await BackgroundServiceManager.isServiceRunning();
+
+        developer.log('Dashboard: Service running = $isRunning');
+
+        if (!isRunning) {
+          // ⚠️ Service belum running, coba start
+          developer.log('⚠️ Service not running, attempting to start');
+
+          if (!Get.isRegistered<BackgroundController>()) {
+            Get.put(BackgroundController());
+          }
+
+          final bgController = BackgroundController.to;
+          await bgController.initializeAllServices();
+        } else {
+          developer.log('✓ Service already running, skipping initialization');
         }
       }
     });
 
-    // Show minimal UI notification
+    // Show notification
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         Get.snackbar(
-          'Setup Complete',
-          'The app will continue running in the background',
+          'Protected',
+          'App running in background',
           snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           backgroundColor: AppColors.success.withOpacity(0.9),
           colorText: AppColors.white,
         );
       }
     });
 
-    // Auto-minimize after 5 seconds
-    Future.delayed(const Duration(seconds: 5), () {
+    // Auto-minimize
+    Future.delayed(const Duration(seconds: 4), () {
       if (mounted) {
         _controller.minimizeApp();
       }

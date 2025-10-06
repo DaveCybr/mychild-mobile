@@ -1,4 +1,5 @@
 // controllers/permission_controller.dart
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
@@ -72,14 +73,16 @@ class PermissionController extends GetxController {
     // Update UI
     update(['permission_list', 'progress']);
   }
+  // controllers/permission_controller.dart
 
   Future<bool> requestLocationPermission() async {
     currentPermissionIndex.value = 0;
     update(['permission_list', 'progress']);
 
-    PermissionStatus status = await Permission.locationAlways.request();
+    // Step 1: Request foreground location first
+    PermissionStatus foregroundStatus = await Permission.location.request();
 
-    if (status.isPermanentlyDenied) {
+    if (foregroundStatus.isPermanentlyDenied) {
       Get.snackbar(
         'Permission Required',
         'Please enable location permission from settings',
@@ -89,9 +92,56 @@ class PermissionController extends GetxController {
       return false;
     }
 
-    locationGranted.value = status.isGranted;
+    if (!foregroundStatus.isGranted) {
+      return false;
+    }
+
+    // Step 2: Request background location (Android 10+)
+    if (Platform.isAndroid) {
+      // Show explanation dialog first (required by Google Play policy)
+      bool shouldRequestBackground =
+          await Get.dialog<bool>(
+            AlertDialog(
+              title: const Text('Background Location'),
+              content: const Text(
+                'This app needs to access your location in the background to keep you safe. '
+                'Please select "Allow all the time" in the next screen.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Get.back(result: false),
+                  child: const Text('Skip'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Get.back(result: true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+
+      if (!shouldRequestBackground) {
+        locationGranted.value = foregroundStatus.isGranted;
+        return foregroundStatus.isGranted;
+      }
+
+      PermissionStatus backgroundStatus = await Permission.locationAlways
+          .request();
+
+      if (backgroundStatus.isPermanentlyDenied) {
+        await openAppSettings();
+        return false;
+      }
+
+      locationGranted.value = backgroundStatus.isGranted;
+      update(['permission_list']);
+      return backgroundStatus.isGranted;
+    }
+
+    locationGranted.value = foregroundStatus.isGranted;
     update(['permission_list']);
-    return status.isGranted;
+    return foregroundStatus.isGranted;
   }
 
   Future<bool> requestCameraPermission() async {
