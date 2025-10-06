@@ -40,12 +40,8 @@ class NotificationListenerService {
             );
           }
 
-          // Send to server
-          await ApiService.sendNotification(
-            appName: packageName,
-            title: title,
-            content: text,
-          );
+          // Note: Server sending is already handled in native code
+          // This is just for Flutter UI logging
         } catch (e) {
           print('NotificationListenerService handler error: $e');
         }

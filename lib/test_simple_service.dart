@@ -186,11 +186,19 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
   final FlutterBackgroundService _service = FlutterBackgroundService();
   bool _isServiceConfigured = false;
   bool _permissionsGranted = false;
+  String _deviceId = '';
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
+    _loadDeviceId();
+  }
+
+  Future<void> _loadDeviceId() async {
+    final deviceId = await DeviceService.getDeviceId();
+    setState(() => _deviceId = deviceId);
+    print('Device ID loaded: $deviceId');
   }
 
   Future<void> _checkPermissions() async {
@@ -347,6 +355,7 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
     final isRunning = await _service.isRunning();
 
     String status = '';
+    status += 'Device ID: $_deviceId\n';
     status += 'Permissions: ${_permissionsGranted ? "YES" : "NO"}\n';
     status += 'Configured: ${_isServiceConfigured ? "YES" : "NO"}\n';
     status += 'Running: ${isRunning ? "YES" : "NO"}';
@@ -358,10 +367,10 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
     final isGranted = await NotificationListenerService.isPermissionGranted();
 
     if (isGranted) {
-      setState(() => _status = 'Notification Listener: Enabled');
+      setState(() => _status = 'Notification Listener: ✅ Enabled');
       await ServiceLogger.log('Notification listener enabled');
     } else {
-      setState(() => _status = 'Notification Listener: Disabled');
+      setState(() => _status = 'Notification Listener: ❌ Disabled');
       await ServiceLogger.log('Notification listener disabled');
 
       if (mounted) {
@@ -434,6 +443,43 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
     }
   }
 
+  Future<void> _viewServiceLog() async {
+    await ServiceLogger.init();
+    final logContent = await ServiceLogger._logFile!.readAsString();
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Service Logs'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: SingleChildScrollView(
+              child: Text(
+                logContent.isEmpty ? 'No logs yet' : logContent,
+                style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await ServiceLogger._logFile!.writeAsString('');
+                Navigator.pop(context);
+              },
+              child: const Text('Clear'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -454,6 +500,11 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
                 const Text(
                   'Background Service Test',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Device ID: ${_deviceId.isNotEmpty ? _deviceId.substring(0, 8) : "Loading..."}...',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 24),
                 Container(
@@ -509,6 +560,8 @@ class _SimpleServiceTestState extends State<SimpleServiceTest> {
                   Colors.indigo,
                   _viewNotificationLog,
                 ),
+                const SizedBox(height: 12),
+                _buildButton('VIEW SERVICE LOGS', Colors.teal, _viewServiceLog),
               ],
             ),
           ),

