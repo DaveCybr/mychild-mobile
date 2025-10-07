@@ -136,7 +136,7 @@ class NotificationService {
 
       developer.log('Manually sending notification to server', name: _tag);
 
-      final apiService = Get.find<ApiService>();
+      final apiService = ApiService();
 
       await apiService.post(
         ApiEndpoints.sendNotification,

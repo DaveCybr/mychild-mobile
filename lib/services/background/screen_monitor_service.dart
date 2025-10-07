@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_screen_capture/flutter_screen_capture.dart';
-import 'package:get/get.dart';
+// import 'package:get/get.dart';
 import 'dart:developer' as developer;
 
 import '../../core/constants/app_endpoints.dart';
@@ -58,7 +59,7 @@ class ScreenMonitorService {
       }
 
       // Get ApiService lazily
-      final apiService = Get.find<ApiService>();
+      final apiService = ApiService();
 
       final response = await apiService.get(
         ApiEndpoints.checkActiveSession.replaceAll(':childId', childId),
@@ -109,7 +110,7 @@ class ScreenMonitorService {
       if (screenshot == null) return;
 
       // Get ApiService lazily
-      final apiService = Get.find<ApiService>();
+      final apiService = ApiService();
 
       await apiService.post(
         ApiEndpoints.sendScreenFrame,
@@ -155,6 +156,16 @@ class ScreenMonitorService {
   /// Capture screenshot -> return Uint8List
   static Future<Uint8List?> _captureScreenshot() async {
     try {
+      // Jangan jalankan jika di background isolate
+      if (PlatformDispatcher.instance.onBeginFrame == null) {
+        developer.log(
+          "Skipped capture: running in background isolate",
+          name: _tag,
+          level: 800,
+        );
+        return null;
+      }
+
       final captured = await ScreenCapture().captureEntireScreen();
       if (captured == null) return null;
       return captured.buffer;

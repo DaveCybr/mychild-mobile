@@ -14,7 +14,7 @@ void main() async {
   await LocalStorageService.init();
 
   // IMPORTANT: Only CONFIGURE service, don't start yet
-  // await BackgroundServiceManager.initializeService();
+  await BackgroundServiceManager.initializeService();
 
   // Lock orientation to portrait
   SystemChrome.setPreferredOrientations([

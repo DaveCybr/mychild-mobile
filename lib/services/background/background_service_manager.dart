@@ -1,33 +1,37 @@
 // services/background/background_service_manager.dart
 import 'dart:async';
 import 'dart:ui';
+import 'dart:developer' as developer;
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+
 import 'location_service.dart';
 import 'notification_service.dart';
 import 'screen_monitor_service.dart';
 import '../local/local_storage_service.dart';
-import 'dart:developer' as developer;
 
 @pragma('vm:entry-point')
 class BackgroundServiceManager {
   static const String _tag = 'BackgroundServiceManager';
 
-  /// STEP 1: Initialize (configure only, don't start)
+  /// STEP 1: Initialize configuration (only called once in main.dart)
   static Future<void> initializeService() async {
-    developer.log('Initializing background service configuration', name: _tag);
+    developer.log(
+      'Initializing background service configuration...',
+      name: _tag,
+    );
 
     final service = FlutterBackgroundService();
 
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
-        autoStart: false, // Don't auto-start
+        autoStart: false,
         isForegroundMode: true,
         notificationChannelId: 'child_app_background',
         initialNotificationTitle: 'Family Safety',
-        initialNotificationContent: 'Initializing...',
-        foregroundServiceNotificationId: 888,
+        initialNotificationContent: 'Preparing background service...',
+        foregroundServiceNotificationId: 1001,
         foregroundServiceTypes: [AndroidForegroundType.location],
       ),
       iosConfiguration: IosConfiguration(
@@ -37,178 +41,177 @@ class BackgroundServiceManager {
       ),
     );
 
-    developer.log('Background service configured successfully', name: _tag);
+    developer.log('✅ Service configuration complete', name: _tag);
   }
 
-  /// STEP 2: Service entry point (CRITICAL: proper timing for foreground)
+  /// STEP 2: Service entry point (executed in background isolate)
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
-    developer.log('========================================', name: _tag);
-    developer.log('SERVICE STARTING', name: _tag);
-    developer.log('========================================', name: _tag);
+    developer.log('-----------------------------------------', name: _tag);
+    developer.log('🚀 SERVICE STARTING', name: _tag);
+    developer.log('-----------------------------------------', name: _tag);
 
-    // CRITICAL STEP 1: Register plugins immediately
     DartPluginRegistrant.ensureInitialized();
-    developer.log('✅ Plugins registered', name: _tag);
 
     if (service is AndroidServiceInstance) {
       try {
-        developer.log(
-          '🔧 Setting up Android foreground service...',
-          name: _tag,
-        );
-
-        // CRITICAL STEP 2: Set notification info BEFORE promoting to foreground
+        // 🔹 Step 1: Ensure notification created BEFORE foreground
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: "Initializing service...",
+          content: "Starting background monitoring...",
         );
-        developer.log('✅ Notification info set', name: _tag);
 
-        // CRITICAL STEP 3: Promote to foreground (NOW safe because notification exists)
-        service.setAsForegroundService();
-        developer.log('✅ Promoted to foreground service', name: _tag);
+        // 🔹 Step 2: Wait a bit (Android 12+ requires delay)
+        await Future.delayed(const Duration(milliseconds: 800));
 
-        // CRITICAL STEP 4: Small delay for stability
-        await Future.delayed(const Duration(milliseconds: 400));
+        // 🔹 Step 3: Promote to foreground
+        await service.setAsForegroundService();
+        developer.log('✅ Foreground service started successfully', name: _tag);
 
-        // STEP 5: Initialize storage
-        developer.log('📦 Initializing local storage...', name: _tag);
+        // 🔹 Step 4: Initialize local storage
         await LocalStorageService.init();
         final isPaired = await LocalStorageService.getIsPaired();
         developer.log('Pairing status: $isPaired', name: _tag);
 
-        // STEP 6: Update notification based on status
+        // 🔹 Step 5: Update notification
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: isPaired ? "Monitoring active" : "Ready",
+          content: isPaired ? "Monitoring active" : "Ready to pair",
         );
-        developer.log('✅ Notification updated', name: _tag);
 
-        // STEP 7: Start monitoring services if paired
+        // 🔹 Step 6: Start background tasks (only if paired)
         if (isPaired) {
-          developer.log('🚀 Starting monitoring services...', name: _tag);
+          developer.log(
+            'Starting background monitoring modules...',
+            name: _tag,
+          );
 
-          LocationService.startTracking();
-          developer.log('  ✅ Location tracking started', name: _tag);
+          try {
+            LocationService.startTracking();
+            developer.log('✅ Location tracking started', name: _tag);
+          } catch (e) {
+            developer.log('❌ Location tracking failed: $e', name: _tag);
+          }
 
-          NotificationService.startListening();
-          developer.log('  ✅ Notification listening started', name: _tag);
+          try {
+            await NotificationService.startListening();
+            developer.log('✅ Notification listener started', name: _tag);
+          } catch (e) {
+            developer.log('❌ Notification listener failed: $e', name: _tag);
+          }
 
-          ScreenMonitorService.startMonitoring();
-          developer.log('  ✅ Screen monitoring started', name: _tag);
+          try {
+            ScreenMonitorService.startMonitoring();
+            developer.log('✅ Screen monitoring started', name: _tag);
+          } catch (e) {
+            developer.log('❌ Screen monitoring failed: $e', name: _tag);
+          }
 
-          developer.log('✅ All monitoring services started', name: _tag);
+          developer.log('✅ All background modules started', name: _tag);
         } else {
           developer.log(
-            '⏭️ Device not paired, monitoring services not started',
+            '⏭️ Device not paired — background modules skipped',
             name: _tag,
           );
         }
-      } catch (e, stackTrace) {
+      } catch (e, stack) {
         developer.log(
-          '❌ CRITICAL ERROR during service initialization',
+          '❌ CRITICAL: Failed to start background service',
           name: _tag,
           error: e,
-          stackTrace: stackTrace,
-          level: 1000,
+          stackTrace: stack,
         );
-
-        // Stop service on critical error
-        developer.log('Stopping service due to error', name: _tag);
-        service.stopSelf();
+        await service.stopSelf();
         return;
       }
     }
 
-    // STEP 8: Setup event listeners
-    developer.log('Setting up event listeners...', name: _tag);
-
-    service.on('stopService').listen((event) {
-      developer.log('Stop command received', name: _tag);
-      LocationService.stopTracking();
-      NotificationService.stopListening();
-      ScreenMonitorService.stopMonitoring();
-      service.stopSelf();
+    // 🔹 Step 7: Event listeners
+    service.on('stopService').listen((event) async {
+      developer.log('🛑 Stop command received', name: _tag);
+      try {
+        LocationService.stopTracking();
+        NotificationService.stopListening();
+        ScreenMonitorService.stopMonitoring();
+      } catch (e) {
+        developer.log('Error while stopping services: $e', name: _tag);
+      }
+      await service.stopSelf();
     });
 
-    service.on('refreshStatus').listen((event) {
-      developer.log('Refresh status command received', name: _tag);
+    service.on('refreshStatus').listen((event) async {
+      developer.log('🔁 Refresh status command received', name: _tag);
       if (service is AndroidServiceInstance) {
-        service.setForegroundNotificationInfo(
+        await service.setForegroundNotificationInfo(
           title: "Family Safety",
           content:
-              "Status refreshed at ${DateTime.now().toString().substring(11, 19)}",
+              "Status refreshed at ${DateTime.now().toLocal().toIso8601String()}",
         );
       }
     });
 
-    // STEP 9: Keep-alive timer
-    developer.log('Starting keep-alive timer...', name: _tag);
+    // 🔹 Step 8: Keep-alive heartbeat (every 30s)
     Timer.periodic(const Duration(seconds: 30), (timer) async {
       if (service is AndroidServiceInstance) {
         try {
           if (await service.isForegroundService()) {
             final now = DateTime.now();
-            service.setForegroundNotificationInfo(
+            await service.setForegroundNotificationInfo(
               title: "Family Safety Active",
               content:
-                  "Last update: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
+                  "Last heartbeat: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
             );
-
-            developer.log('Heartbeat: Service still active', name: _tag);
+            developer.log('💓 Heartbeat OK', name: _tag);
           } else {
             developer.log(
-              'Service no longer foreground, stopping timer',
+              '⚠️ Service not foreground — stopping heartbeat',
               name: _tag,
             );
             timer.cancel();
           }
         } catch (e) {
-          developer.log('Error in heartbeat timer', name: _tag, error: e);
+          developer.log('❌ Heartbeat error: $e', name: _tag);
           timer.cancel();
         }
       }
     });
 
-    developer.log('========================================', name: _tag);
     developer.log('✅ SERVICE FULLY INITIALIZED', name: _tag);
-    developer.log('========================================', name: _tag);
   }
 
-  /// iOS background handler
+  /// STEP 3: iOS background handler
   @pragma('vm:entry-point')
   static Future<bool> onIosBackground(ServiceInstance service) async {
-    developer.log('iOS background mode', name: _tag);
+    developer.log('Running iOS background mode', name: _tag);
     DartPluginRegistrant.ensureInitialized();
     return true;
   }
 
-  /// STEP 3: Start service (call this after pairing)
-  static void startBackgroundServices() {
-    developer.log('Starting background service...', name: _tag);
+  /// STEP 4: Start background service (called after pairing success)
+  static Future<void> startBackgroundServices() async {
+    developer.log('▶️ Starting background service...', name: _tag);
     final service = FlutterBackgroundService();
-    service.startService();
-    developer.log('Start command sent', name: _tag);
+    await service.startService();
+    developer.log('✅ Background service start command sent', name: _tag);
   }
 
-  /// Stop all background services
-  static void stopBackgroundServices() {
-    developer.log('Stopping background service...', name: _tag);
+  /// STEP 5: Stop background service completely
+  static Future<void> stopBackgroundServices() async {
+    developer.log('⏹️ Stopping background service...', name: _tag);
     final service = FlutterBackgroundService();
     service.invoke("stopService");
-    developer.log('Stop command sent', name: _tag);
+    developer.log('✅ Background service stop command sent', name: _tag);
   }
 
-  /// Check if service is running
+  /// STEP 6: Check if background service is currently running
   static Future<bool> isServiceRunning() async {
     final service = FlutterBackgroundService();
     return await service.isRunning();
   }
 
-  /// Refresh service status
+  /// STEP 7: Refresh notification info manually
   static void refreshServiceStatus() {
-    developer.log('Refreshing service status...', name: _tag);
+    developer.log('🔄 Refreshing service notification...', name: _tag);
     final service = FlutterBackgroundService();
     service.invoke("refreshStatus");
   }

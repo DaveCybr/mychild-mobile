@@ -66,7 +66,7 @@ class CameraService {
       if (childId == null) return;
 
       // Get ApiService lazily and initialize
-      final apiService = Get.find<ApiService>();
+      final apiService = ApiService();
 
       FormData formData = FormData.fromMap({
         'child_id': childId,

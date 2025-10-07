@@ -51,7 +51,7 @@ class LocationService {
       if (deviceId == null) return;
 
       // Get ApiService lazily
-      final apiService = Get.find<ApiService>();
+      final apiService = ApiService();
 
       await apiService.post(
         ApiEndpoints.sendLocation,
