@@ -41,32 +41,6 @@ class BackgroundController extends GetxController {
     try {
       // STEP 0: Check critical permissions first
       developer.log('Checking permissions...', name: _tag);
-      final locationPermission = await Permission.locationAlways.status;
-
-      if (!locationPermission.isGranted) {
-        developer.log(
-          '❌ Location permission NOT granted!',
-          name: _tag,
-          level: 1000,
-        );
-        developer.log(
-          'Cannot start services without location permission',
-          name: _tag,
-          level: 1000,
-        );
-
-        Get.snackbar(
-          'Permission Required',
-          'Location permission is required for background monitoring',
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.white,
-          duration: const Duration(seconds: 5),
-        );
-
-        servicesRunning.value = false;
-        return;
-      }
 
       developer.log('✅ Location permission granted', name: _tag);
 

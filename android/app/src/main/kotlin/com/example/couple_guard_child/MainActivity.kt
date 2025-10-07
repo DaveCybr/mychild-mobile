@@ -1,6 +1,10 @@
 package com.example.couple_guard_child
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -12,6 +16,25 @@ import com.example.couple_guard_child.services.background.MyNotificationListener
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
     private val TAG = "MainActivity"
+    
+    // ✅ CRITICAL: Notification Channel IDs (MUST match background_service_manager.dart)
+    companion object {
+        const val NOTIFICATION_CHANNEL_ID = "child_app_background"
+        const val NOTIFICATION_CHANNEL_NAME = "Background Service"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "MainActivity onCreate()")
+        
+        // ✅ STEP 1: Create notification channel BEFORE service starts
+        createNotificationChannel()
+        
+        Log.d(TAG, "Notification channel created")
+        Log.d(TAG, "========================================")
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,6 +69,59 @@ class MainActivity: FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        }
+    }
+    
+    /**
+     * ✅ CRITICAL FIX: Create notification channel for foreground service
+     * This MUST be called before starting the background service
+     */
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                
+                // Check if channel already exists
+                val existingChannel = notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
+                
+                if (existingChannel == null) {
+                    Log.d(TAG, "Creating notification channel: $NOTIFICATION_CHANNEL_ID")
+                    
+                    val channel = NotificationChannel(
+                        NOTIFICATION_CHANNEL_ID,
+                        NOTIFICATION_CHANNEL_NAME,
+                        NotificationManager.IMPORTANCE_LOW // LOW = tidak ada suara
+                    ).apply {
+                        description = "Keeps the app running in background for family safety"
+                        setShowBadge(false)
+                        enableLights(false)
+                        enableVibration(false)
+                        setSound(null, null) // No sound
+                    }
+                    
+                    notificationManager.createNotificationChannel(channel)
+                    
+                    Log.d(TAG, "✅ Notification channel created successfully")
+                } else {
+                    Log.d(TAG, "✅ Notification channel already exists")
+                }
+                
+                // Verify channel exists
+                val verifyChannel = notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
+                if (verifyChannel != null) {
+                    Log.d(TAG, "✅ Channel verification PASSED")
+                    Log.d(TAG, "   - ID: ${verifyChannel.id}")
+                    Log.d(TAG, "   - Name: ${verifyChannel.name}")
+                    Log.d(TAG, "   - Importance: ${verifyChannel.importance}")
+                } else {
+                    Log.e(TAG, "❌ Channel verification FAILED!")
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to create notification channel", e)
+            }
+        } else {
+            Log.d(TAG, "Android version < O, notification channel not required")
         }
     }
 

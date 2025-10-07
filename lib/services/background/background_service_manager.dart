@@ -1,4 +1,4 @@
-// services/background/background_service_manager.dart
+// services/background/background_service_manager.dart - FIXED VERSION
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
@@ -29,11 +29,17 @@ class BackgroundServiceManager {
         onStart: onStart,
         autoStart: false,
         isForegroundMode: true,
+
+        // ✅ CRITICAL: MUST match channel ID in MainActivity.kt
         notificationChannelId: 'child_app_background',
+
         initialNotificationTitle: 'Family Safety',
-        initialNotificationContent: 'Preparing background service...',
+        initialNotificationContent: 'Service is starting...',
         foregroundServiceNotificationId: 1001,
-        foregroundServiceTypes: [AndroidForegroundType.location],
+        foregroundServiceTypes: [
+          AndroidForegroundType.location,
+          AndroidForegroundType.dataSync,
+        ],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -56,36 +62,41 @@ class BackgroundServiceManager {
 
     if (service is AndroidServiceInstance) {
       try {
-        // PENTING: Ensure notification channel exists BEFORE setForegroundNotificationInfo
-        if (Platform.isAndroid) {
-          // Channel sudah dibuat di MainActivity
-          developer.log('Using pre-created notification channel', name: _tag);
-        }
+        developer.log('Platform: Android ${Platform.version}', name: _tag);
 
-        // 🔹 Step 1: Set notification info (jangan langsung setAsForegroundService)
+        // ✅ STEP 1: Delay pertama (untuk Android 12+)
+        developer.log('Waiting for system to stabilize...', name: _tag);
+        await Future.delayed(const Duration(milliseconds: 1500));
+
+        // ✅ STEP 2: Set notification info PERTAMA
+        developer.log('Setting initial notification...', name: _tag);
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: "Initializing...",
+          content: "Initializing service...",
         );
 
-        // 🔹 Step 2: Delay untuk Android 12+
-        await Future.delayed(const Duration(milliseconds: 1200));
+        // ✅ STEP 3: Delay kedua (critical untuk Android 13+)
+        developer.log('Waiting before setAsForegroundService...', name: _tag);
+        await Future.delayed(const Duration(milliseconds: 1500));
 
-        // 🔹 Step 3: Set as foreground
+        // ✅ STEP 4: Set as foreground service
+        developer.log('Calling setAsForegroundService()...', name: _tag);
         await service.setAsForegroundService();
-        developer.log('✅ Foreground service started', name: _tag);
-        // 🔹 Step 4: Initialize local storage
+        developer.log('✅ Foreground service STARTED', name: _tag);
+
+        // ✅ STEP 5: Initialize local storage
+        developer.log('Initializing local storage...', name: _tag);
         await LocalStorageService.init();
         final isPaired = await LocalStorageService.getIsPaired();
         developer.log('Pairing status: $isPaired', name: _tag);
 
-        // 🔹 Step 5: Update notification
+        // ✅ STEP 6: Update notification dengan status
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
           content: isPaired ? "Monitoring active" : "Ready to pair",
         );
 
-        // 🔹 Step 6: Start background tasks (only if paired)
+        // ✅ STEP 7: Start background tasks (only if paired)
         if (isPaired) {
           developer.log(
             'Starting background monitoring modules...',
@@ -126,13 +137,15 @@ class BackgroundServiceManager {
           name: _tag,
           error: e,
           stackTrace: stack,
+          level: 1000,
         );
-        await service.stopSelf();
-        return;
+
+        // Don't stop service on error, just log it
+        developer.log('⚠️ Service will continue despite error', name: _tag);
       }
     }
 
-    // 🔹 Step 7: Event listeners
+    // ✅ STEP 8: Event listeners
     service.on('stopService').listen((event) async {
       developer.log('🛑 Stop command received', name: _tag);
       try {
@@ -151,13 +164,13 @@ class BackgroundServiceManager {
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
           content:
-              "Status refreshed at ${DateTime.now().toLocal().toIso8601String()}",
+              "Refreshed at ${DateTime.now().toLocal().toIso8601String().substring(11, 19)}",
         );
       }
     });
 
-    // 🔹 Step 8: Keep-alive heartbeat (every 30s)
-    Timer.periodic(const Duration(seconds: 30), (timer) async {
+    // ✅ STEP 9: Keep-alive heartbeat (every 60s untuk reduce overhead)
+    Timer.periodic(const Duration(seconds: 60), (timer) async {
       if (service is AndroidServiceInstance) {
         try {
           if (await service.isForegroundService()) {
@@ -165,7 +178,7 @@ class BackgroundServiceManager {
             await service.setForegroundNotificationInfo(
               title: "Family Safety Active",
               content:
-                  "Last heartbeat: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
+                  "Last check: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
             );
             developer.log('💓 Heartbeat OK', name: _tag);
           } else {
@@ -196,9 +209,33 @@ class BackgroundServiceManager {
   /// STEP 4: Start background service (called after pairing success)
   static Future<void> startBackgroundServices() async {
     developer.log('▶️ Starting background service...', name: _tag);
-    final service = FlutterBackgroundService();
-    await service.startService();
-    developer.log('✅ Background service start command sent', name: _tag);
+
+    try {
+      final service = FlutterBackgroundService();
+
+      // Check if already running
+      final isRunning = await service.isRunning();
+      if (isRunning) {
+        developer.log('⚠️ Service already running', name: _tag);
+        return;
+      }
+
+      await service.startService();
+      developer.log('✅ Background service start command sent', name: _tag);
+
+      // Verify after delay
+      await Future.delayed(const Duration(seconds: 3));
+      final nowRunning = await service.isRunning();
+      developer.log('Service running status: $nowRunning', name: _tag);
+    } catch (e, stack) {
+      developer.log(
+        '❌ Failed to start service',
+        name: _tag,
+        error: e,
+        stackTrace: stack,
+        level: 1000,
+      );
+    }
   }
 
   /// STEP 5: Stop background service completely

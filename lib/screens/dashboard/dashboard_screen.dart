@@ -99,24 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         appBar: AppBar(
           title: const Text('Dashboard'),
           actions: [
-            // Refresh button
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () async {
-                developer.log('Manual refresh triggered', name: _tag);
-                await _controller.loadDashboardData();
-                await _bgController.refreshStatus();
-
-                Get.snackbar(
-                  'Refreshed',
-                  'Dashboard data updated',
-                  snackPosition: SnackPosition.TOP,
-                  duration: const Duration(seconds: 2),
-                  backgroundColor: AppColors.info.withOpacity(0.9),
-                  colorText: AppColors.white,
-                );
-              },
-            ),
             // Menu
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -127,16 +109,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'stop_services',
-                  child: Row(
-                    children: [
-                      Icon(Icons.stop_circle, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Text('Stop Services'),
-                    ],
-                  ),
-                ),
                 const PopupMenuItem(
                   value: 'unpair',
                   child: Row(
@@ -154,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ],
         ),
-        backgroundColor: AppColors.background,
+        // backgroundColor: AppColors.background,
         body: SafeArea(
           child: Column(
             children: [
