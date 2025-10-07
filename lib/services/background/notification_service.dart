@@ -16,7 +16,6 @@ class NotificationService {
   static bool _isListening = false;
   static StreamSubscription? _subscription;
 
-  /// Initialize and start listening to notifications
   static Future<void> startListening() async {
     if (_isListening) {
       developer.log('Already listening, skipping', name: _tag);
@@ -27,25 +26,26 @@ class NotificationService {
     developer.log('STARTING NOTIFICATION LISTENER', name: _tag);
 
     try {
-      // Check permission
+      // Skip ini di background isolate
       final hasPermission = await checkPermission();
       developer.log('Permission status: $hasPermission', name: _tag);
 
       if (!hasPermission) {
-        developer.log(
-          '⚠️ No notification permission, cannot start',
-          name: _tag,
-        );
-        developer.log(
-          'User needs to grant permission from settings',
-          name: _tag,
-        );
+        developer.log('⚠️ No notification permission', name: _tag);
         return;
       }
 
-      // Setup method call handler for notifications from native
       _channel.setMethodCallHandler(_handleNotificationFromNative);
       developer.log('✅ Method call handler registered', name: _tag);
+      // if (isolateId == 1) {
+      //   // Main isolate ID
+      // } else {
+      //   developer.log(
+      //     '⚠️ Notification service hanya support di main isolate',
+      //     name: _tag,
+      //   );
+      //   return;
+      // }
 
       _isListening = true;
       developer.log('✅ Notification listener ACTIVE', name: _tag);

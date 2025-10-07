@@ -3,12 +3,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_screen_capture/flutter_screen_capture.dart';
-// import 'package:get/get.dart';
 import 'dart:developer' as developer;
+import 'package:dio/dio.dart'; // ← TAMBAH INI
 
 import '../../core/constants/app_endpoints.dart';
 import '../../core/constants/app_constants.dart';
-import '../api/api_service.dart';
 import '../local/local_storage_service.dart';
 
 class ScreenMonitorService {
@@ -19,6 +18,7 @@ class ScreenMonitorService {
   static bool _isStreaming = false;
   static String? _currentSessionToken;
   static int _frameCounter = 0;
+  static late Dio _dio; // ← TAMBAH INI
 
   /// Mulai monitoring
   static void startMonitoring() {
@@ -31,16 +31,13 @@ class ScreenMonitorService {
       (_) => _checkForActiveSession(),
     );
 
-    // Initial check dengan delay untuk memastikan app sudah siap
     Future.delayed(const Duration(seconds: 3), () {
       _checkForActiveSession();
     });
   }
 
-  /// Hentikan monitoring
   static void stopMonitoring() {
     developer.log('Stopping screen monitoring', name: _tag);
-
     _checkTimer?.cancel();
     stopStreaming();
   }
@@ -58,47 +55,55 @@ class ScreenMonitorService {
         return;
       }
 
-      // Get ApiService lazily
-      final apiService = ApiService();
+      // Initialize Dio jika belum
 
-      final response = await apiService.get(
-        ApiEndpoints.checkActiveSession.replaceAll(':childId', childId),
-      );
+      // Use Dio directly instead of ApiService
+      try {
+        final response = await _dio.get(
+          ApiEndpoints.checkActiveSession.replaceAll(':childId', childId),
+        );
 
-      final isBeingMonitored = response.data['is_being_monitored'] ?? false;
-      final activeSession = response.data['active_session'];
+        final isBeingMonitored = response.data['is_being_monitored'] ?? false;
+        final activeSession = response.data['active_session'];
 
+        developer.log(
+          'Session check result - Being monitored: $isBeingMonitored',
+          name: _tag,
+        );
+
+        if (isBeingMonitored && !_isStreaming && activeSession != null) {
+          _currentSessionToken = activeSession['session_token'];
+          developer.log(
+            'Starting stream for session: $_currentSessionToken',
+            name: _tag,
+          );
+          await startStreaming();
+        } else if (!isBeingMonitored && _isStreaming) {
+          developer.log('Stopping stream - no active session', name: _tag);
+          stopStreaming();
+        }
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          developer.log(
+            'No active session found (404) - This is normal',
+            name: _tag,
+          );
+        } else {
+          developer.log(
+            'Failed to check active session',
+            name: _tag,
+            error: e,
+            level: 900,
+          );
+        }
+      }
+    } catch (e) {
       developer.log(
-        'Session check result - Being monitored: $isBeingMonitored',
+        'Unexpected error in _checkForActiveSession',
         name: _tag,
+        error: e,
+        level: 900,
       );
-
-      if (isBeingMonitored && !_isStreaming && activeSession != null) {
-        _currentSessionToken = activeSession['session_token'];
-        developer.log(
-          'Starting stream for session: $_currentSessionToken',
-          name: _tag,
-        );
-        await startStreaming();
-      } else if (!isBeingMonitored && _isStreaming) {
-        developer.log('Stopping stream - no active session', name: _tag);
-        stopStreaming();
-      }
-    } on Exception catch (e) {
-      // Handle 404 dan error lainnya dengan graceful
-      if (e.toString().contains('404')) {
-        developer.log(
-          'No active session found (404) - This is normal',
-          name: _tag,
-        );
-      } else {
-        developer.log(
-          'Failed to check active session',
-          name: _tag,
-          error: e,
-          level: 900,
-        );
-      }
     }
   }
 
@@ -109,10 +114,7 @@ class ScreenMonitorService {
       final screenshot = await _captureScreenshot();
       if (screenshot == null) return;
 
-      // Get ApiService lazily
-      final apiService = ApiService();
-
-      await apiService.post(
+      await _dio.post(
         ApiEndpoints.sendScreenFrame,
         data: {
           'session_token': _currentSessionToken,
@@ -128,7 +130,6 @@ class ScreenMonitorService {
     }
   }
 
-  /// Mulai streaming screenshot
   static Future<void> startStreaming() async {
     if (_isStreaming || _currentSessionToken == null) return;
 
@@ -137,14 +138,12 @@ class ScreenMonitorService {
     _isStreaming = true;
     _frameCounter = 0;
 
-    // Ambil frame tiap 500ms
     _streamTimer = Timer.periodic(
       const Duration(milliseconds: 500),
       (_) => _sendFrame(),
     );
   }
 
-  /// Stop streaming
   static void stopStreaming() {
     developer.log('Stream stopped', name: _tag);
 
@@ -153,10 +152,8 @@ class ScreenMonitorService {
     _currentSessionToken = null;
   }
 
-  /// Capture screenshot -> return Uint8List
   static Future<Uint8List?> _captureScreenshot() async {
     try {
-      // Jangan jalankan jika di background isolate
       if (PlatformDispatcher.instance.onBeginFrame == null) {
         developer.log(
           "Skipped capture: running in background isolate",

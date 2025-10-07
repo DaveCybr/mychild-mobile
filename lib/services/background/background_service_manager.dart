@@ -1,5 +1,6 @@
 // services/background/background_service_manager.dart
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 import 'dart:developer' as developer;
 import 'package:flutter_background_service/flutter_background_service.dart';
@@ -55,19 +56,24 @@ class BackgroundServiceManager {
 
     if (service is AndroidServiceInstance) {
       try {
-        // 🔹 Step 1: Ensure notification created BEFORE foreground
+        // PENTING: Ensure notification channel exists BEFORE setForegroundNotificationInfo
+        if (Platform.isAndroid) {
+          // Channel sudah dibuat di MainActivity
+          developer.log('Using pre-created notification channel', name: _tag);
+        }
+
+        // 🔹 Step 1: Set notification info (jangan langsung setAsForegroundService)
         await service.setForegroundNotificationInfo(
           title: "Family Safety",
-          content: "Starting background monitoring...",
+          content: "Initializing...",
         );
 
-        // 🔹 Step 2: Wait a bit (Android 12+ requires delay)
-        await Future.delayed(const Duration(milliseconds: 800));
+        // 🔹 Step 2: Delay untuk Android 12+
+        await Future.delayed(const Duration(milliseconds: 1200));
 
-        // 🔹 Step 3: Promote to foreground
+        // 🔹 Step 3: Set as foreground
         await service.setAsForegroundService();
-        developer.log('✅ Foreground service started successfully', name: _tag);
-
+        developer.log('✅ Foreground service started', name: _tag);
         // 🔹 Step 4: Initialize local storage
         await LocalStorageService.init();
         final isPaired = await LocalStorageService.getIsPaired();
