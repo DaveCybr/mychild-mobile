@@ -1,18 +1,18 @@
 class DeviceModel {
   final int? id;
-  final int parentId;
+  final int? parentId;
   final String deviceId;
   final String deviceName;
-  final String deviceType;
+  final String? deviceType;
   final bool isOnline;
   final DateTime? lastSeen;
 
   DeviceModel({
     this.id,
-    required this.parentId,
+    this.parentId,
     required this.deviceId,
     required this.deviceName,
-    required this.deviceType,
+    this.deviceType,
     this.isOnline = false,
     this.lastSeen,
   });
@@ -20,19 +20,20 @@ class DeviceModel {
   factory DeviceModel.fromJson(Map<String, dynamic> json) {
     return DeviceModel(
       id: json['id'],
-      parentId: json['parent_id'],
-      deviceId: json['device_id'],
-      deviceName: json['device_name'],
-      deviceType: json['device_type'],
+      parentId: json['parent_id'] ?? 0,
+      deviceId: json['device_id'] ?? '',
+      deviceName: json['device_name'] ?? '',
+      deviceType: json['device_type'] ?? 'android', // nullable
       isOnline: json['is_online'] ?? false,
       lastSeen: json['last_seen'] != null
-          ? DateTime.parse(json['last_seen'])
+          ? DateTime.tryParse(json['last_seen'])
           : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'parent_id': parentId,
       'device_id': deviceId,
       'device_name': deviceName,

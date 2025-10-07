@@ -146,7 +146,7 @@ class DeviceService extends GetxService {
         await LocalStorageService.saveDeviceInfo(
           deviceId: deviceId,
           familyCode: familyCode,
-          parentId: pairingResponse.device!.parentId,
+          parentId: pairingResponse.device!.parentId ?? 0,
         );
 
         developer.log('Device paired and saved to local storage', name: _tag);

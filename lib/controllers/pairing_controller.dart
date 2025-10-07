@@ -57,7 +57,7 @@ class PairingController extends GetxController {
         await LocalStorageService.saveDeviceInfo(
           deviceId: response.device!.deviceId,
           familyCode: code.toUpperCase(),
-          parentId: response.device!.parentId,
+          parentId: response.device!.parentId ?? 0,
         );
         developer.log('Device info saved to local storage', name: _tag);
 

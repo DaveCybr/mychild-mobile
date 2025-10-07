@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'dart:developer' as developer;
 import '../../controllers/background_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/dashboard_controller.dart';
@@ -20,31 +21,35 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with WidgetsBindingObserver {
-  final DashboardController _controller = Get.put(DashboardController());
+  static const String _tag = 'DashboardScreen';
 
-  // Di _DashboardScreenState, update initState:
+  final DashboardController _controller = Get.put(DashboardController());
+  late final BackgroundController _bgController;
 
   @override
   void initState() {
     super.initState();
+    developer.log('Dashboard screen initialized', name: _tag);
+
     WidgetsBinding.instance.addObserver(this);
 
-    // Initialize BackgroundController DI SINI, bukan di PermissionScreen
+    // Initialize BackgroundController if not already registered
     if (!Get.isRegistered<BackgroundController>()) {
-      Get.put(BackgroundController());
+      developer.log('Registering BackgroundController', name: _tag);
+      _bgController = Get.put(BackgroundController());
+    } else {
+      _bgController = Get.find<BackgroundController>();
     }
 
-    // Start semua services setelah dashboard loaded
+    // Start all services after dashboard is loaded
     Future.delayed(const Duration(milliseconds: 1000), () {
-      if (mounted) {
-        final bgController = BackgroundController.to;
-        if (!bgController.servicesRunning.value) {
-          bgController.initializeAllServices();
-        }
+      if (mounted && !_bgController.servicesRunning.value) {
+        developer.log('Auto-starting background services...', name: _tag);
+        _bgController.initializeAllServices();
       }
     });
 
-    // Show minimal UI notification
+    // Show setup complete notification
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         Get.snackbar(
@@ -54,16 +59,31 @@ class _DashboardScreenState extends State<DashboardScreen>
           duration: const Duration(seconds: 3),
           backgroundColor: AppColors.success.withOpacity(0.9),
           colorText: AppColors.white,
+          icon: const Icon(Icons.check_circle, color: AppColors.white),
         );
       }
     });
 
     // Auto-minimize after 5 seconds
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        _controller.minimizeApp();
-      }
-    });
+    // Future.delayed(const Duration(seconds: 5), () {
+    //   if (mounted) {
+    //     developer.log('Auto-minimizing app', name: _tag);
+    //     _controller.minimizeApp();
+    //   }
+    // });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    developer.log('Dashboard screen disposed', name: _tag);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    developer.log('App lifecycle state: $state', name: _tag);
+    super.didChangeAppLifecycleState(state);
   }
 
   @override
@@ -71,23 +91,52 @@ class _DashboardScreenState extends State<DashboardScreen>
     return WillPopScope(
       onWillPop: () async {
         // Minimize instead of closing
-        if (GetPlatform.isAndroid) {
-          SystemNavigator.pop();
-        }
+        developer.log('Back button pressed, minimizing', name: _tag);
+        _controller.minimizeApp();
         return false;
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Dashboard'),
           actions: [
-            // Tambahkan menu untuk unpair
+            // Refresh button
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () async {
+                developer.log('Manual refresh triggered', name: _tag);
+                await _controller.loadDashboardData();
+                await _bgController.refreshStatus();
+
+                Get.snackbar(
+                  'Refreshed',
+                  'Dashboard data updated',
+                  snackPosition: SnackPosition.TOP,
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: AppColors.info.withOpacity(0.9),
+                  colorText: AppColors.white,
+                );
+              },
+            ),
+            // Menu
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'unpair') {
                   _showUnpairDialog();
+                } else if (value == 'stop_services') {
+                  _showStopServicesDialog();
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'stop_services',
+                  child: Row(
+                    children: [
+                      Icon(Icons.stop_circle, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Text('Stop Services'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'unpair',
                   child: Row(
@@ -181,11 +230,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                         icon: Icons.phone_android,
                         color: AppColors.primary,
                         children: [
-                          _buildInfoRow(
-                            'Device ID',
-                            _controller.deviceId.value.isNotEmpty
-                                ? '${_controller.deviceId.value.substring(0, 8)}...'
-                                : 'Loading...',
+                          Obx(
+                            () => _buildInfoRow(
+                              'Device ID',
+                              _controller.deviceId.value.isNotEmpty
+                                  ? '${_controller.deviceId.value.substring(0, 8)}...'
+                                  : 'Loading...',
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Obx(
@@ -202,6 +253,36 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                           ),
                         ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Service Status Card
+                      Obx(
+                        () => StatusCard(
+                          title: 'Background Service',
+                          icon: Icons.settings_system_daydream,
+                          color: _bgController.servicesRunning.value
+                              ? AppColors.success
+                              : AppColors.error,
+                          children: [
+                            _buildInfoRow(
+                              'Status',
+                              _bgController.servicesRunning.value
+                                  ? 'Running'
+                                  : 'Stopped',
+                              trailing: Icon(
+                                _bgController.servicesRunning.value
+                                    ? Icons.check_circle
+                                    : Icons.cancel,
+                                color: _bgController.servicesRunning.value
+                                    ? AppColors.success
+                                    : AppColors.error,
+                                size: 20,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
 
                       const SizedBox(height: 16),
@@ -245,7 +326,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'App Running in Background',
+                                    'Running in Background',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -254,7 +335,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   ),
                                   const SizedBox(height: 4),
                                   const Text(
-                                    'This app will continue monitoring in the background to keep you safe',
+                                    'This app continues monitoring even when minimized',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -279,10 +360,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Floating minimize button
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () {
+            developer.log('Manual minimize button pressed', name: _tag);
             _controller.minimizeApp();
-            if (GetPlatform.isAndroid) {
-              SystemNavigator.pop();
-            }
           },
           backgroundColor: AppColors.primary,
           icon: const Icon(Icons.minimize, color: AppColors.white),
@@ -333,12 +412,52 @@ class _DashboardScreenState extends State<DashboardScreen>
     return AppColors.error;
   }
 
-  void _showUnpairDialog() {
+  void _showStopServicesDialog() {
     Get.dialog(
       AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Stop Services?'),
+          ],
+        ),
+        content: const Text(
+          'This will stop all monitoring services. Location tracking and notification mirroring will be paused.\n\nAre you sure?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              Get.back();
+              _bgController.stopAllServices();
+
+              Get.snackbar(
+                'Services Stopped',
+                'All monitoring services have been stopped',
+                snackPosition: SnackPosition.TOP,
+                backgroundColor: Colors.orange,
+                colorText: Colors.white,
+                duration: const Duration(seconds: 3),
+              );
+            },
+            child: const Text(
+              'Stop Services',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnpairDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
             SizedBox(width: 8),
             Text('Unpair Device?'),
           ],
@@ -359,7 +478,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 barrierDismissible: false,
               );
 
-              // Unpair
+              // Stop services first
+              _bgController.stopAllServices();
+              await Future.delayed(const Duration(milliseconds: 500));
+
+              // Unpair from server
               final deviceService = Get.find<DeviceService>();
               final success = await deviceService.unpairDevice();
 
@@ -372,9 +495,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   snackPosition: SnackPosition.TOP,
                   backgroundColor: Colors.green,
                   colorText: Colors.white,
+                  duration: const Duration(seconds: 3),
                 );
 
-                // Redirect ke onboarding
+                // Redirect to onboarding
+                await Future.delayed(const Duration(milliseconds: 500));
                 Get.offAll(() => const OnboardingScreen());
               } else {
                 Get.snackbar(
@@ -383,6 +508,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   snackPosition: SnackPosition.TOP,
                   backgroundColor: Colors.red,
                   colorText: Colors.white,
+                  duration: const Duration(seconds: 3),
                 );
               }
             },
