@@ -1,4 +1,4 @@
-// controllers/permission_controller.dart - COMPLETE FIX
+// controllers/permission_controller.dart - LOCATION FIX
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
@@ -14,7 +14,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
   final RxBool notificationGranted = false.obs;
   final RxBool storageGranted = false.obs;
   final RxBool batteryOptimizationDisabled = false.obs;
-  final RxBool accessibilityGranted = false.obs;
 
   final RxBool isCheckingPermissions = false.obs;
   final RxInt currentPermissionIndex = 0.obs;
@@ -22,30 +21,27 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
   final List<String> permissionTitles = [
     'Location Access',
+    'Background Location',
     'Camera Access',
     'Notification Access',
     'Storage Access',
     'Battery Optimization',
-    'Accessibility Service',
   ];
 
   final List<String> permissionDescriptions = [
     'Required to track device location for safety',
+    'Allows location tracking when app is closed',
     'Needed for emergency photo capture',
     'Required to mirror notifications',
     'Needed to save monitoring data',
     'Disable to keep app running in background',
-    'Required for screen monitoring features',
   ];
 
   @override
   void onInit() {
     super.onInit();
     developer.log('PermissionController initialized', name: _tag);
-
-    // Add lifecycle observer untuk detect app resume
     WidgetsBinding.instance.addObserver(this);
-
     checkAllPermissions();
   }
 
@@ -56,7 +52,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     super.onClose();
   }
 
-  /// CRITICAL: Detect when user returns from Settings
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     developer.log('App lifecycle changed: $state', name: _tag);
@@ -66,8 +61,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
         'App resumed from Settings, re-checking permissions',
         name: _tag,
       );
-
-      // User kembali dari Settings, check ulang permissions
       isWaitingForSettings.value = false;
 
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -83,8 +76,16 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     isCheckingPermissions.value = true;
 
     try {
-      locationGranted.value = await Permission.locationAlways.isGranted;
-      developer.log('Location: ${locationGranted.value}', name: _tag);
+      // Check foreground location first
+      final fgLocation = await Permission.location.isGranted;
+      final bgLocation = await Permission.locationAlways.isGranted;
+
+      // Location is granted if EITHER foreground OR background is granted
+      locationGranted.value = fgLocation || bgLocation;
+      developer.log(
+        'Location (FG): $fgLocation, (BG): $bgLocation',
+        name: _tag,
+      );
 
       cameraGranted.value = await Permission.camera.isGranted;
       developer.log('Camera: ${cameraGranted.value}', name: _tag);
@@ -108,7 +109,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       } else {
         notificationGranted.value = true;
         batteryOptimizationDisabled.value = true;
-        accessibilityGranted.value = true;
       }
     } catch (e, stackTrace) {
       developer.log(
@@ -123,20 +123,24 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     }
 
     developer.log('========================================', name: _tag);
-
-    // Update UI
     update(['permission_list', 'progress']);
   }
 
+  /// CRITICAL FIX: Request foreground location first, then background
   Future<bool> requestLocationPermission() async {
-    developer.log('Requesting location permission...', name: _tag);
+    developer.log('========================================', name: _tag);
+    developer.log('REQUESTING LOCATION PERMISSION (Step 1/2)', name: _tag);
+
     currentPermissionIndex.value = 0;
     update(['permission_list', 'progress']);
 
-    PermissionStatus status = await Permission.locationAlways.request();
-    developer.log('Location permission result: $status', name: _tag);
+    // STEP 1: Request FOREGROUND location first (ACCESS_FINE_LOCATION)
+    developer.log('Step 1: Requesting FOREGROUND location...', name: _tag);
 
-    if (status.isPermanentlyDenied) {
+    PermissionStatus fgStatus = await Permission.location.request();
+    developer.log('Foreground location result: $fgStatus', name: _tag);
+
+    if (fgStatus.isPermanentlyDenied) {
       developer.log(
         'Location permanently denied, opening settings',
         name: _tag,
@@ -156,23 +160,110 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       return false;
     }
 
-    locationGranted.value = status.isGranted;
+    if (!fgStatus.isGranted) {
+      developer.log('Foreground location DENIED by user', name: _tag);
+      locationGranted.value = false;
+      update(['permission_list']);
+      return false;
+    }
+
+    // Foreground location granted!
+    developer.log('✅ Foreground location GRANTED', name: _tag);
+    locationGranted.value = true;
     update(['permission_list']);
 
-    return status.isGranted;
+    developer.log('========================================', name: _tag);
+    return true;
+  }
+
+  /// STEP 2: Request background location (called separately)
+  Future<bool> requestBackgroundLocationPermission() async {
+    developer.log('========================================', name: _tag);
+    developer.log('REQUESTING BACKGROUND LOCATION (Step 2/2)', name: _tag);
+
+    currentPermissionIndex.value = 1;
+    update(['permission_list', 'progress']);
+
+    // Check if foreground is granted first
+    final fgGranted = await Permission.location.isGranted;
+    if (!fgGranted) {
+      developer.log(
+        '❌ Cannot request background - foreground not granted',
+        name: _tag,
+      );
+      return false;
+    }
+
+    // Show explanation dialog first (Android best practice)
+    await Get.dialog(
+      AlertDialog(
+        title: const Text('Background Location'),
+        content: const Text(
+          'To keep tracking your location when the app is closed, '
+          'please select "Allow all the time" in the next screen.\n\n'
+          'This helps keep you safe even when you\'re not actively using the app.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Get.back(),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    // Small delay to let dialog close
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Request background location
+    developer.log(
+      'Requesting BACKGROUND location (locationAlways)...',
+      name: _tag,
+    );
+
+    PermissionStatus bgStatus = await Permission.locationAlways.request();
+    developer.log('Background location result: $bgStatus', name: _tag);
+
+    if (bgStatus.isPermanentlyDenied) {
+      developer.log('Background location permanently denied', name: _tag);
+
+      Get.snackbar(
+        'Background Location',
+        'For full protection, enable "Allow all the time" in Settings',
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 4),
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+
+      // Don't block - foreground location is still granted
+      return true;
+    }
+
+    if (bgStatus.isGranted) {
+      developer.log('✅ Background location GRANTED', name: _tag);
+    } else {
+      developer.log(
+        '⚠️ Background location DENIED (but foreground still OK)',
+        name: _tag,
+      );
+    }
+
+    developer.log('========================================', name: _tag);
+    update(['permission_list']);
+    return true; // Return true because foreground is granted
   }
 
   Future<bool> requestCameraPermission() async {
     developer.log('Requesting camera permission...', name: _tag);
-    currentPermissionIndex.value = 1;
+    currentPermissionIndex.value = 2;
     update(['permission_list', 'progress']);
 
     PermissionStatus status = await Permission.camera.request();
     developer.log('Camera permission result: $status', name: _tag);
 
     if (status.isPermanentlyDenied) {
-      developer.log('Camera permanently denied, opening settings', name: _tag);
-
       Get.snackbar(
         'Permission Required',
         'Please enable camera permission from settings',
@@ -189,23 +280,17 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
     cameraGranted.value = status.isGranted;
     update(['permission_list']);
-
     return status.isGranted;
   }
 
   Future<bool> requestNotificationPermission() async {
     developer.log('Requesting notification permission...', name: _tag);
-    currentPermissionIndex.value = 2;
+    currentPermissionIndex.value = 3;
     update(['permission_list', 'progress']);
 
     if (Platform.isAndroid) {
-      // Check current status first
       bool alreadyGranted =
           await NotificationListenerService.isPermissionGranted();
-      developer.log(
-        'Notification already granted: $alreadyGranted',
-        name: _tag,
-      );
 
       if (alreadyGranted) {
         notificationGranted.value = true;
@@ -213,15 +298,14 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
         return true;
       }
 
-      // Show explanation dialog
       await Get.dialog(
         AlertDialog(
           title: const Text('Notification Access'),
           content: const Text(
-            'This app needs to access notifications to mirror them to your parent\'s device.\n\n'
+            'This app needs to access notifications to mirror them.\n\n'
             'Steps:\n'
             '1. Tap "Open Settings"\n'
-            '2. Find "couple_guard_child" or "Family Safety"\n'
+            '2. Find "Family Safety"\n'
             '3. Toggle it ON\n'
             '4. Return to app',
           ),
@@ -238,22 +322,12 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
         ),
       );
 
-      // Open settings
-      developer.log('Opening notification listener settings', name: _tag);
       isWaitingForSettings.value = true;
-
       bool? granted = await NotificationListenerService.requestPermission();
 
-      // Wait a bit for settings to close
       await Future.delayed(const Duration(milliseconds: 1000));
 
-      // Check again
       granted = await NotificationListenerService.isPermissionGranted();
-      developer.log(
-        'Notification permission after settings: $granted',
-        name: _tag,
-      );
-
       notificationGranted.value = granted ?? false;
       update(['permission_list']);
 
@@ -265,12 +339,11 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
   Future<bool> requestStoragePermission() async {
     developer.log('Requesting storage permission...', name: _tag);
-    currentPermissionIndex.value = 3;
+    currentPermissionIndex.value = 4;
     update(['permission_list', 'progress']);
 
     PermissionStatus status = await Permission.storage.request();
 
-    // For Android 13+, also request photos
     if (Platform.isAndroid) {
       final photosStatus = await Permission.photos.request();
       if (photosStatus.isGranted) {
@@ -278,11 +351,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       }
     }
 
-    developer.log('Storage permission result: $status', name: _tag);
-
     if (status.isPermanentlyDenied) {
-      developer.log('Storage permanently denied, opening settings', name: _tag);
-
       Get.snackbar(
         'Permission Required',
         'Please enable storage permission from settings',
@@ -299,23 +368,21 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
     storageGranted.value = status.isGranted;
     update(['permission_list']);
-
     return status.isGranted;
   }
 
   Future<bool> requestBatteryOptimization() async {
     developer.log('Requesting battery optimization disable...', name: _tag);
-    currentPermissionIndex.value = 4;
+    currentPermissionIndex.value = 5;
     update(['permission_list', 'progress']);
 
     if (Platform.isAndroid) {
-      // Show explanation first
       await Get.dialog(
         AlertDialog(
           title: const Text('Battery Optimization'),
           content: const Text(
-            'To keep the app running in the background, you need to disable battery optimization.\n\n'
-            'Tap "Open Settings" and select "Don\'t optimize" or "Allow".',
+            'To keep the app running in the background, disable battery optimization.\n\n'
+            'Tap "Open Settings" and select "Don\'t optimize".',
           ),
           actions: [
             TextButton(
@@ -333,7 +400,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       isWaitingForSettings.value = true;
       PermissionStatus status = await Permission.ignoreBatteryOptimizations
           .request();
-      developer.log('Battery optimization result: $status', name: _tag);
 
       batteryOptimizationDisabled.value = status.isGranted;
       update(['permission_list']);
@@ -344,43 +410,49 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     return true;
   }
 
+  /// Request all permissions in correct order
   Future<bool> requestAllPermissions() async {
     developer.log('========================================', name: _tag);
     developer.log('REQUESTING ALL PERMISSIONS', name: _tag);
 
     bool allGranted = true;
 
-    // 1. Location
+    // 1. Foreground Location (MUST be first)
     if (!locationGranted.value) {
       if (!await requestLocationPermission()) allGranted = false;
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 1000));
     }
 
-    // 2. Camera
+    // 2. Background Location (MUST be after foreground)
+    if (locationGranted.value) {
+      await requestBackgroundLocationPermission();
+      await Future.delayed(const Duration(milliseconds: 1000));
+    }
+
+    // 3. Camera
     if (!cameraGranted.value) {
       if (!await requestCameraPermission()) allGranted = false;
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    // 3. Notification
+    // 4. Notification
     if (!notificationGranted.value) {
       if (!await requestNotificationPermission()) allGranted = false;
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    // 4. Storage
+    // 5. Storage
     if (!storageGranted.value) {
       if (!await requestStoragePermission()) allGranted = false;
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    // 5. Battery Optimization
+    // 6. Battery Optimization
     if (!batteryOptimizationDisabled.value) {
       if (!await requestBatteryOptimization()) allGranted = false;
-      await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    developer.log('All permissions granted: $allGranted', name: _tag);
+    developer.log('All permissions process completed', name: _tag);
     developer.log('========================================', name: _tag);
 
     return allGranted;
@@ -394,16 +466,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
               storageGranted.value &&
               batteryOptimizationDisabled.value
         : locationGranted.value && cameraGranted.value && storageGranted.value;
-
-    developer.log('All permissions granted check: $allGranted', name: _tag);
-    developer.log('  Location: ${locationGranted.value}', name: _tag);
-    developer.log('  Camera: ${cameraGranted.value}', name: _tag);
-    developer.log('  Notification: ${notificationGranted.value}', name: _tag);
-    developer.log('  Storage: ${storageGranted.value}', name: _tag);
-    developer.log(
-      '  Battery: ${batteryOptimizationDisabled.value}',
-      name: _tag,
-    );
 
     return allGranted;
   }
