@@ -295,50 +295,6 @@ class _PermissionScreenState extends State<PermissionScreen>
                       : const Icon(Icons.lock_open, color: Colors.white),
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              // Skip button
-              TextButton(
-                onPressed: () {
-                  Get.dialog(
-                    AlertDialog(
-                      title: const Text('Skip Permissions?'),
-                      content: const Text(
-                        'Some features may not work properly without all permissions. '
-                        'You can grant them later from Settings.\n\n'
-                        'Are you sure you want to skip?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Get.back(),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            await LocalStorageService.setPermissionCompleted(
-                              true,
-                            );
-                            Get.back();
-
-                            if (mounted) {
-                              Get.offAll(() => const DashboardScreen());
-                            }
-                          },
-                          child: const Text(
-                            'Skip',
-                            style: TextStyle(color: AppColors.error),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                child: const Text(
-                  'Skip for now',
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 14),
-                ),
-              ),
             ],
           ),
         ),

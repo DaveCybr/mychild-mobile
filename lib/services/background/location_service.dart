@@ -13,50 +13,34 @@ class LocationService {
 
   static Timer? _locationTimer;
   static final Battery _battery = Battery();
-  static Dio? _dio;
+
+  // ✅ FIX: Initialize langsung
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: ApiEndpoints.baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    ),
+  );
+
   static bool _isSending = false;
 
-  /// ✅ FIX: Lazy initialization of Dio
-  static Dio get dio {
-    if (_dio == null) {
-      developer.log('Initializing Dio for LocationService', name: _tag);
-      _dio = Dio(
-        BaseOptions(
-          baseUrl: ApiEndpoints.baseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ),
-      );
-      developer.log('✅ Dio initialized', name: _tag);
-    }
-    return _dio!;
-  }
+  // ✅ Remove lazy getter, langsung akses _dio
 
   static void startTracking() {
-    developer.log('========================================', name: _tag);
     developer.log('STARTING LOCATION TRACKING', name: _tag);
-
-    // Cancel existing timer
     _locationTimer?.cancel();
 
-    // Start periodic tracking
     _locationTimer = Timer.periodic(
       Duration(minutes: AppConstants.locationUpdateInterval),
       (_) => _sendLocation(),
     );
 
-    // Send immediately on start
     _sendLocation();
-
-    developer.log(
-      'Location tracking started (interval: ${AppConstants.locationUpdateInterval} min)',
-      name: _tag,
-    );
-    developer.log('========================================', name: _tag);
   }
 
   static void stopTracking() {
@@ -64,11 +48,9 @@ class LocationService {
     _locationTimer?.cancel();
     _locationTimer = null;
     _isSending = false;
-    developer.log('✅ Location tracking stopped', name: _tag);
   }
 
   static Future<void> _sendLocation() async {
-    // ✅ Prevent concurrent sends
     if (_isSending) {
       developer.log('⏭️ Location send already in progress', name: _tag);
       return;
@@ -79,7 +61,6 @@ class LocationService {
     try {
       developer.log('Checking location permission...', name: _tag);
 
-      // Check permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -89,7 +70,6 @@ class LocationService {
 
       developer.log('Getting current position...', name: _tag);
 
-      // Get position with timeout
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 10),
@@ -100,21 +80,19 @@ class LocationService {
         name: _tag,
       );
 
-      // Get battery level
       final batteryLevel = await _battery.batteryLevel;
       developer.log('Battery: $batteryLevel%', name: _tag);
 
-      // Get device ID
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null) {
         developer.log('❌ Device ID not found', name: _tag, level: 900);
         return;
       }
 
-      // Send to server
       developer.log('Sending location to server...', name: _tag);
 
-      final response = await dio.post(
+      // ✅ FIX: Langsung pakai _dio (sudah initialize)
+      final response = await _dio.post(
         ApiEndpoints.sendLocation,
         data: {
           'device_id': deviceId,
@@ -156,13 +134,11 @@ class LocationService {
     }
   }
 
-  /// Send location immediately (for parent request)
   static Future<void> sendImmediateLocation() async {
     developer.log('📍 Immediate location request', name: _tag);
     await _sendLocation();
   }
 
-  /// Check if tracking is active
   static bool get isTracking =>
       _locationTimer != null && _locationTimer!.isActive;
 }

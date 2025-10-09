@@ -230,33 +230,32 @@ class _DashboardScreenState extends State<DashboardScreen>
                       const SizedBox(height: 16),
 
                       // Service Status Card
-                      Obx(
-                        () => StatusCard(
-                          title: 'Background Service',
-                          icon: Icons.settings_system_daydream,
-                          color: _bgController.servicesRunning.value
-                              ? AppColors.success
-                              : AppColors.error,
-                          children: [
-                            _buildInfoRow(
-                              'Status',
-                              _bgController.servicesRunning.value
-                                  ? 'Running'
-                                  : 'Stopped',
-                              trailing: Icon(
-                                _bgController.servicesRunning.value
-                                    ? Icons.check_circle
-                                    : Icons.cancel,
-                                color: _bgController.servicesRunning.value
-                                    ? AppColors.success
-                                    : AppColors.error,
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
+                      // Obx(
+                      //   () => StatusCard(
+                      //     title: 'Background Service',
+                      //     icon: Icons.settings_system_daydream,
+                      //     color: _bgController.servicesRunning.value
+                      //         ? AppColors.success
+                      //         : AppColors.error,
+                      //     children: [
+                      //       _buildInfoRow(
+                      //         'Status',
+                      //         _bgController.servicesRunning.value
+                      //             ? 'Running'
+                      //             : 'Stopped',
+                      //         trailing: Icon(
+                      //           _bgController.servicesRunning.value
+                      //               ? Icons.check_circle
+                      //               : Icons.cancel,
+                      //           color: _bgController.servicesRunning.value
+                      //               ? AppColors.success
+                      //               : AppColors.error,
+                      //           size: 20,
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
                       const SizedBox(height: 16),
 
                       // Monitoring Status

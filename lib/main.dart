@@ -1,4 +1,6 @@
 import 'package:couple_guard_child/core/bindings/initial_binding.dart';
+import 'package:couple_guard_child/services/fcm/fcm_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -9,6 +11,7 @@ import 'screens/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
 
   // Initialize local storage first
   await LocalStorageService.init();
