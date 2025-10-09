@@ -1,5 +1,6 @@
 // lib/controllers/background_controller.dart - FIXED
 import 'package:get/get.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:developer' as developer;
 import '../services/background/background_service_manager.dart';
 import '../services/background/location_service.dart';
@@ -37,6 +38,49 @@ class BackgroundController extends GetxController {
     developer.log('========================================', name: _tag);
 
     try {
+      // ✅ FIX: Check permissions properly
+      developer.log('Checking permissions...', name: _tag);
+
+      // Check location permission (either foreground OR background is OK)
+      final fgLocation = await Permission.location.isGranted;
+      final bgLocation = await Permission.locationAlways.isGranted;
+      final hasLocationPermission = fgLocation || bgLocation;
+
+      developer.log(
+        'Location (FG): $fgLocation, (BG): $bgLocation',
+        name: _tag,
+      );
+
+      if (!hasLocationPermission) {
+        developer.log('❌ Location permission NOT granted!', name: _tag);
+        developer.log(
+          'Cannot start services without location permission',
+          name: _tag,
+        );
+
+        // Show error to user
+        Get.snackbar(
+          'Permission Required',
+          'Location permission is required to start monitoring',
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 3),
+        );
+        return;
+      }
+
+      developer.log('✅ Location permission granted', name: _tag);
+
+      // Check camera permission
+      final cameraGranted = await Permission.camera.isGranted;
+      developer.log('Camera: $cameraGranted', name: _tag);
+
+      if (!cameraGranted) {
+        developer.log(
+          '⚠️ Camera permission not granted (photo capture will fail)',
+          name: _tag,
+        );
+      }
+
       // STEP 1: Initialize camera service
       developer.log('Initializing camera service...', name: _tag);
       await CameraService.initialize();
@@ -48,7 +92,7 @@ class BackgroundController extends GetxController {
       developer.log('✅ Background service start command sent', name: _tag);
 
       // STEP 3: Wait for service to initialize
-      await Future.delayed(const Duration(milliseconds: 1500));
+      await Future.delayed(const Duration(milliseconds: 2000));
 
       // STEP 4: Verify service is running
       final isRunning = await BackgroundServiceManager.isServiceRunning();
@@ -83,6 +127,14 @@ class BackgroundController extends GetxController {
       locationActive.value = false;
       notificationActive.value = false;
       screenMonitorActive.value = false;
+
+      // Show error to user
+      Get.snackbar(
+        'Error',
+        'Failed to start background services: $e',
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 
@@ -124,7 +176,6 @@ class BackgroundController extends GetxController {
   }
 
   /// Handle commands from parent app (via FCM)
-  /// Note: This is now handled by FcmHandler, kept for compatibility
   void handleParentCommand(Map<String, dynamic> command) {
     final commandType = command['type'] as String?;
 
