@@ -138,14 +138,24 @@ class MyNotificationListenerService : NotificationListenerService() {
             val timestamp = sbn.postTime
 
             Log.d(TAG, "Title: $title")
-            Log.d(TAG, "Text: ${text.take(50)}${if (text.length > 50) "..." else ""}")
+            Log.d(TAG, "Text: $text")
             Log.d(TAG, "Timestamp: $timestamp")
 
-            // PRIORITY 1: Send to server (most reliable)
-            sendToServer(packageName, title, text)
+            // ✅ FIX: Skip empty notifications
+            if (title.isBlank() && text.isBlank()) {
+                Log.w(TAG, "⏭️ SKIPPED: Empty title AND content")
+                return
+            }
             
-            // PRIORITY 2: Send to Flutter UI (optional, may fail if app closed)
-            sendToFlutter(packageName, title, text, timestamp)
+            // ✅ FIX: Use fallback if one is empty
+            val finalTitle = if (title.isBlank()) packageName else title
+            val finalContent = if (text.isBlank()) "New notification" else text
+
+            // PRIORITY 1: Send to server (most reliable)
+            sendToServer(packageName, finalTitle, finalContent)
+            
+            // PRIORITY 2: Send to Flutter UI (optional)
+            sendToFlutter(packageName, finalTitle, finalContent, timestamp)
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ ERROR processing notification", e)
