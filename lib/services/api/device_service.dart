@@ -1,3 +1,4 @@
+// lib/services/api/device_service.dart - UPDATED WITH FCM
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:get/get.dart';
 import 'dart:io';
@@ -10,7 +11,6 @@ import '../local/local_storage_service.dart';
 class DeviceService extends GetxService {
   static const String _tag = 'DeviceService';
 
-  // Lazy getter instead of eager initialization
   ApiService get _apiService => Get.find<ApiService>();
 
   Future<String> getDeviceId() async {
@@ -43,7 +43,49 @@ class DeviceService extends GetxService {
     return deviceName;
   }
 
-  /// BARU: Verify apakah device sudah paired di server
+  /// ✅ NEW: Update FCM Token
+  Future<bool> updateFcmToken(String fcmToken) async {
+    try {
+      final deviceId = await LocalStorageService.getDeviceId();
+
+      if (deviceId == null || deviceId.isEmpty) {
+        developer.log('❌ No device ID found', name: _tag);
+        return false;
+      }
+
+      developer.log('Updating FCM token for device: $deviceId', name: _tag);
+      developer.log('Token: ${fcmToken.substring(0, 20)}...', name: _tag);
+
+      final response = await _apiService.post(
+        ApiEndpoints.updateFcmToken,
+        data: {'device_id': deviceId, 'fcm_token': fcmToken},
+      );
+
+      developer.log('FCM token update response: ${response.data}', name: _tag);
+
+      if (response.data['success'] == true) {
+        developer.log('✅ FCM token updated successfully', name: _tag);
+        return true;
+      } else {
+        developer.log(
+          '⚠️ FCM token update failed: ${response.data['message']}',
+          name: _tag,
+        );
+        return false;
+      }
+    } catch (e, stackTrace) {
+      developer.log(
+        '❌ Failed to update FCM token',
+        name: _tag,
+        error: e,
+        stackTrace: stackTrace,
+        level: 1000,
+      );
+      return false;
+    }
+  }
+
+  /// Verify if device is still paired on server
   Future<Map<String, dynamic>?> verifyPairing() async {
     try {
       final deviceId = await getDeviceId();
@@ -61,24 +103,26 @@ class DeviceService extends GetxService {
           response.data['is_paired'] == true) {
         final deviceData = response.data['data'];
 
-        // Sync local storage dengan data dari server
+        // Sync local storage with server data
         await LocalStorageService.saveDeviceInfo(
           deviceId: deviceData['device_id'],
           familyCode: deviceData['family_code'],
           parentId: deviceData['parent_id'],
         );
 
-        developer.log('Device is paired, synced with server data', name: _tag);
+        developer.log(
+          '✅ Device is paired, synced with server data',
+          name: _tag,
+        );
 
         return deviceData;
       }
 
-      developer.log('Device not paired on server', name: _tag);
-
+      developer.log('⚠️ Device not paired on server', name: _tag);
       return null;
     } catch (e) {
       developer.log(
-        'Failed to verify pairing',
+        '❌ Failed to verify pairing',
         name: _tag,
         error: e,
         level: 900,
@@ -87,7 +131,7 @@ class DeviceService extends GetxService {
     }
   }
 
-  /// BARU: Unpair device dari server dan local storage
+  /// Unpair device from server and clear local storage
   Future<bool> unpairDevice() async {
     try {
       final deviceId = await getDeviceId();
@@ -103,15 +147,14 @@ class DeviceService extends GetxService {
         // Clear local storage
         await LocalStorageService.clearPairing();
 
-        developer.log('Device unpaired successfully', name: _tag);
-
+        developer.log('✅ Device unpaired successfully', name: _tag);
         return true;
       }
 
       return false;
     } catch (e) {
       developer.log(
-        'Failed to unpair device',
+        '❌ Failed to unpair device',
         name: _tag,
         error: e,
         level: 1000,
@@ -120,6 +163,7 @@ class DeviceService extends GetxService {
     }
   }
 
+  /// Pair device with family code
   Future<PairingResponseModel> pairDevice(String familyCode) async {
     try {
       final deviceId = await getDeviceId();
@@ -149,28 +193,36 @@ class DeviceService extends GetxService {
           parentId: pairingResponse.device!.parentId ?? 0,
         );
 
-        developer.log('Device paired and saved to local storage', name: _tag);
+        developer.log('✅ Device paired and saved to local storage', name: _tag);
       }
 
       return pairingResponse;
     } catch (e) {
-      developer.log('Failed to pair device', name: _tag, error: e, level: 1000);
+      developer.log(
+        '❌ Failed to pair device',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
       throw Exception('Failed to pair device: $e');
     }
   }
 
+  /// Update device online status
   Future<void> updateDeviceStatus(bool isOnline) async {
     try {
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null) return;
 
       await _apiService.put(
-        ApiEndpoints.updateStatus.replaceAll(':deviceId', deviceId),
+        ApiEndpoints.getUpdateStatusUrl(deviceId),
         data: {'is_online': isOnline},
       );
+
+      developer.log('✅ Device status updated: $isOnline', name: _tag);
     } catch (e) {
       developer.log(
-        'Failed to update device status',
+        '❌ Failed to update device status',
         name: _tag,
         error: e,
         level: 900,
@@ -178,6 +230,7 @@ class DeviceService extends GetxService {
     }
   }
 
+  /// Update location (kept for compatibility)
   Future<void> updateLocation(double latitude, double longitude) async {
     try {
       final deviceId = await LocalStorageService.getDeviceId();
@@ -192,9 +245,11 @@ class DeviceService extends GetxService {
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
+
+      developer.log('✅ Location updated', name: _tag);
     } catch (e) {
       developer.log(
-        'Failed to update location',
+        '❌ Failed to update location',
         name: _tag,
         error: e,
         level: 900,

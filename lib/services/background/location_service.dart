@@ -1,4 +1,4 @@
-// services/background/location_service.dart - FIXED VERSION
+// services/background/location_service.dart - FIXED
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -14,65 +14,84 @@ class LocationService {
   static Timer? _locationTimer;
   static final Battery _battery = Battery();
 
-  // ✅ FIX: Initialize langsung
-  static final Dio _dio = Dio(
-    BaseOptions(
-      baseUrl: ApiEndpoints.baseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    ),
-  );
+  // ✅ FIX: Initialize Dio properly
+  static Dio? _dio;
 
-  static bool _isSending = false;
-
-  // ✅ Remove lazy getter, langsung akses _dio
+  static Dio get dio {
+    _dio ??= Dio(
+      BaseOptions(
+        baseUrl: ApiEndpoints.baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ),
+    );
+    return _dio!;
+  }
 
   static void startTracking() {
+    developer.log('========================================', name: _tag);
     developer.log('STARTING LOCATION TRACKING', name: _tag);
+
     _locationTimer?.cancel();
 
+    // ✅ Send immediately on start
+    _sendLocation();
+
+    // ✅ Then send periodically
     _locationTimer = Timer.periodic(
       Duration(minutes: AppConstants.locationUpdateInterval),
-      (_) => _sendLocation(),
+      (_) {
+        developer.log('⏰ Periodic location update triggered', name: _tag);
+        _sendLocation();
+      },
     );
 
-    _sendLocation();
+    developer.log('✅ Location tracking started', name: _tag);
+    developer.log(
+      'Update interval: ${AppConstants.locationUpdateInterval} minutes',
+      name: _tag,
+    );
+    developer.log('========================================', name: _tag);
   }
 
   static void stopTracking() {
     developer.log('Stopping location tracking', name: _tag);
     _locationTimer?.cancel();
     _locationTimer = null;
-    _isSending = false;
+    developer.log('✅ Location tracking stopped', name: _tag);
   }
 
   static Future<void> _sendLocation() async {
-    if (_isSending) {
-      developer.log('⏭️ Location send already in progress', name: _tag);
-      return;
-    }
-
-    _isSending = true;
+    developer.log('========================================', name: _tag);
+    developer.log('📍 SENDING LOCATION UPDATE', name: _tag);
 
     try {
-      developer.log('Checking location permission...', name: _tag);
-
+      // ✅ Check permission first
       LocationPermission permission = await Geolocator.checkPermission();
+      developer.log('Location permission: $permission', name: _tag);
+
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         developer.log('❌ Location permission denied', name: _tag, level: 900);
         return;
       }
 
-      developer.log('Getting current position...', name: _tag);
+      // ✅ Check if location service is enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        developer.log('❌ Location service disabled', name: _tag, level: 900);
+        return;
+      }
 
+      // ✅ Get current position
+      developer.log('Getting current position...', name: _tag);
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        timeLimit: const Duration(seconds: 15), // Add timeout
       );
 
       developer.log(
@@ -80,65 +99,73 @@ class LocationService {
         name: _tag,
       );
 
+      // ✅ Get battery level
       final batteryLevel = await _battery.batteryLevel;
       developer.log('Battery: $batteryLevel%', name: _tag);
 
+      // ✅ Get device ID
       final deviceId = await LocalStorageService.getDeviceId();
-      if (deviceId == null) {
+      if (deviceId == null || deviceId.isEmpty) {
         developer.log('❌ Device ID not found', name: _tag, level: 900);
         return;
       }
 
-      developer.log('Sending location to server...', name: _tag);
+      developer.log('Device ID: ${deviceId.substring(0, 8)}...', name: _tag);
 
-      // ✅ FIX: Langsung pakai _dio (sudah initialize)
-      final response = await _dio.post(
-        ApiEndpoints.sendLocation,
-        data: {
-          'device_id': deviceId,
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'battery_level': batteryLevel,
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      );
+      // ✅ Prepare payload
+      final payload = {
+        'device_id': deviceId,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'battery_level': batteryLevel,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log('✅ Location sent successfully', name: _tag);
-      } else {
-        developer.log(
-          '⚠️ Server returned: ${response.statusCode}',
-          name: _tag,
-          level: 900,
-        );
-      }
+      developer.log('Payload: $payload', name: _tag);
+
+      // ✅ Send to server
+      developer.log('Sending to server...', name: _tag);
+      final response = await dio.post(ApiEndpoints.sendLocation, data: payload);
+
+      developer.log('✅ Server response: ${response.statusCode}', name: _tag);
+      developer.log('Response data: ${response.data}', name: _tag);
     } on TimeoutException catch (e) {
-      developer.log('⏱️ Location timeout', name: _tag, error: e, level: 900);
-    } on DioException catch (e) {
       developer.log(
-        '❌ Network error sending location',
+        '⏱️ Timeout getting location',
         name: _tag,
         error: e,
         level: 900,
       );
-    } catch (e, stack) {
+    } on DioException catch (e) {
+      developer.log(
+        '❌ Network error sending location',
+        name: _tag,
+        error: e.message,
+        level: 900,
+      );
+      if (e.response != null) {
+        developer.log('Response: ${e.response?.data}', name: _tag, level: 900);
+      }
+    } catch (e, stackTrace) {
       developer.log(
         '❌ Failed to send location',
         name: _tag,
         error: e,
-        stackTrace: stack,
+        stackTrace: stackTrace,
         level: 1000,
       );
-    } finally {
-      _isSending = false;
     }
+
+    developer.log('========================================', name: _tag);
   }
 
+  /// ✅ Send location immediately (triggered by parent command)
   static Future<void> sendImmediateLocation() async {
-    developer.log('📍 Immediate location request', name: _tag);
+    developer.log('📍 IMMEDIATE location request', name: _tag);
     await _sendLocation();
   }
 
+  /// ✅ Check if tracking is active
   static bool get isTracking =>
       _locationTimer != null && _locationTimer!.isActive;
 }

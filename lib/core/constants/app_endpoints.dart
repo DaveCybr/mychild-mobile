@@ -1,27 +1,28 @@
+// lib/core/constants/app_endpoints.dart - FIXED VERSION
 class ApiEndpoints {
   static const String baseUrl =
       'https://parentalcontrol.satelliteorbit.cloud/api';
 
-  // Auth
-  static const String register = '/auth/register';
-  static const String login = '/auth/login';
-
-  // Device
+  // ============================================
+  // DEVICE MANAGEMENT (Child App Uses These)
+  // ============================================
   static const String pairDevice = '/devices/pair';
-  static const String verifyDevice = '/devices/verify'; // BARU
-  static const String unpairDevice = '/devices/unpair'; // BARU
-  static const String updateStatus = '/device/:deviceId/status';
+  static const String verifyDevice = '/devices/verify';
+  static const String unpairDevice = '/devices/unpair';
+  static const String updateFcmToken = '/devices/update-fcm-token'; // ✅ ADDED!
 
-  // Tracking
+  // ============================================
+  // DATA SUBMISSION (Background Service)
+  // ============================================
   static const String sendLocation = '/device/locations';
   static const String sendNotification = '/device/notifications';
   static const String sendScreenshot = '/device/screenshots';
+  static const String updateDeviceStatus = '/device/{deviceId}/status';
 
-  // Screen Monitoring
-  static const String checkActiveSession = '/screen/active-session/:childId';
-  static const String sendScreenFrame = '/screen/stream-frame';
-  static const String sendScreenshot2 = '/screen/screenshot';
-
-  // Camera
-  static const String sendCameraCapture = '/camera/store';
+  // ============================================
+  // HELPER METHOD
+  // ============================================
+  static String getUpdateStatusUrl(String deviceId) {
+    return updateDeviceStatus.replaceAll('{deviceId}', deviceId);
+  }
 }

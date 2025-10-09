@@ -1,7 +1,5 @@
-// controllers/background_controller.dart
-import 'package:couple_guard_child/core/constants/app_colors.dart';
+// lib/controllers/background_controller.dart - FIXED
 import 'package:get/get.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'dart:developer' as developer;
 import '../services/background/background_service_manager.dart';
 import '../services/background/location_service.dart';
@@ -39,11 +37,6 @@ class BackgroundController extends GetxController {
     developer.log('========================================', name: _tag);
 
     try {
-      // STEP 0: Check critical permissions first
-      developer.log('Checking permissions...', name: _tag);
-
-      developer.log('✅ Location permission granted', name: _tag);
-
       // STEP 1: Initialize camera service
       developer.log('Initializing camera service...', name: _tag);
       await CameraService.initialize();
@@ -65,14 +58,11 @@ class BackgroundController extends GetxController {
       );
 
       if (isRunning) {
-        // STEP 5: Services are now active via background service
-        // (LocationService, NotificationService, ScreenMonitorService
-        //  are started inside background_service_manager.dart)
-
+        // Services are now active via background service
         servicesRunning.value = true;
         locationActive.value = true;
         notificationActive.value = true;
-        screenMonitorActive.value = false; // Only active on parent request
+        screenMonitorActive.value = false; // Not supported
 
         developer.log('========================================', name: _tag);
         developer.log('✅ ALL SERVICES RUNNING SUCCESSFULLY', name: _tag);
@@ -109,7 +99,7 @@ class BackgroundController extends GetxController {
       developer.log('✅ Notification listening stopped', name: _tag);
 
       ScreenMonitorService.stopMonitoring();
-      developer.log('✅ Screen monitoring stopped', name: _tag);
+      developer.log('✅ Screen monitoring stopped (stub)', name: _tag);
 
       BackgroundServiceManager.stopBackgroundServices();
       developer.log('✅ Background service stopped', name: _tag);
@@ -133,7 +123,8 @@ class BackgroundController extends GetxController {
     }
   }
 
-  /// Handle commands from parent app
+  /// Handle commands from parent app (via FCM)
+  /// Note: This is now handled by FcmHandler, kept for compatibility
   void handleParentCommand(Map<String, dynamic> command) {
     final commandType = command['type'] as String?;
 
@@ -177,17 +168,19 @@ class BackgroundController extends GetxController {
           break;
 
         case 'START_SCREEN_MONITOR':
-          developer.log('🖥️ Starting screen monitoring...', name: _tag);
-          ScreenMonitorService.startMonitoring();
-          screenMonitorActive.value = true;
-          developer.log('✅ Screen monitoring started', name: _tag);
+          developer.log(
+            '🖥️ Screen monitoring not supported',
+            name: _tag,
+            level: 900,
+          );
           break;
 
         case 'STOP_SCREEN_MONITOR':
-          developer.log('🖥️ Stopping screen monitoring...', name: _tag);
-          ScreenMonitorService.stopMonitoring();
-          screenMonitorActive.value = false;
-          developer.log('✅ Screen monitoring stopped', name: _tag);
+          developer.log(
+            '🖥️ Screen monitoring not supported',
+            name: _tag,
+            level: 900,
+          );
           break;
 
         default:

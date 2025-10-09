@@ -1,7 +1,8 @@
-// screens/splash/splash_screen.dart
+// lib/screens/splash/splash_screen.dart - UPDATED
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/fcm/fcm_service.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../services/api/device_service.dart';
 import '../onboarding/onboarding_screen.dart';
@@ -47,29 +48,22 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _checkAppStatus() async {
     await Future.delayed(const Duration(seconds: 2));
 
+    developer.log('========================================', name: _tag);
     developer.log('Starting app status check', name: _tag);
 
-    // Step 1: Cek local storage dulu
-    // final isPairedLocal = await LocalStorageService.getIsPaired();
-
-    // developer.log('Local pairing status: $isPairedLocal', name: _tag);
-
-    // if (!isPairedLocal) {
-    //   // Belum pernah pairing -> Onboarding
-    //   developer.log('Not paired locally, go to onboarding', name: _tag);
-    //   Get.offAll(() => const OnboardingScreen());
-    //   return;
-    // }
-
-    // Step 2: Verify dengan server
     try {
+      // Step 1: Check if device has FCM token
+      final hasFcmToken = await FcmHandler.hasToken();
+      developer.log('Has FCM token: $hasFcmToken', name: _tag);
+
+      // Step 2: Verify pairing with server
       final deviceService = Get.find<DeviceService>();
       final serverData = await deviceService.verifyPairing();
 
       if (serverData == null) {
-        // Data local ada, tapi server tidak ada (mungkin di-unpair dari parent)
+        // Device not paired on server
         developer.log(
-          'Local says paired, but server says not paired. Clearing local data.',
+          'Device not paired on server, clearing local data',
           name: _tag,
           level: 900,
         );
@@ -89,24 +83,37 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
-      developer.log(
-        'Server verification successful, device is paired',
-        name: _tag,
-      );
+      developer.log('✅ Device is paired on server', name: _tag);
 
-      // Step 3: Cek permission status
+      // Step 3: Send FCM token to server if not sent yet
+      if (hasFcmToken) {
+        developer.log(
+          'Ensuring FCM token is synced with server...',
+          name: _tag,
+        );
+        final fcmToken = await LocalStorageService.getFcmToken();
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          await deviceService.updateFcmToken(fcmToken);
+          developer.log('✅ FCM token synced with server', name: _tag);
+        }
+      } else {
+        developer.log('⚠️ No FCM token yet, will sync later', name: _tag);
+      }
+
+      // Step 4: Check permission status
       final isPermissionCompleted =
           await LocalStorageService.isPermissionCompleted();
 
       developer.log('Permission completed: $isPermissionCompleted', name: _tag);
 
       if (!isPermissionCompleted) {
-        // Sudah pairing tapi belum setup permission
+        // Paired but permissions not setup
         Get.offAll(() => const PermissionScreen());
         return;
       }
 
-      // Semua OK -> Dashboard
+      // Step 5: Everything OK, go to dashboard
+      developer.log('✅ All checks passed, going to dashboard', name: _tag);
       Get.offAll(() => const DashboardScreen());
     } catch (e) {
       developer.log(
@@ -116,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen>
         level: 1000,
       );
 
-      // Kalau ada error network, tetap lanjut berdasarkan local data
+      // On network error, use local data
       developer.log('Network error, using local data', name: _tag, level: 900);
 
       final isPermissionCompleted =
@@ -128,6 +135,8 @@ class _SplashScreenState extends State<SplashScreen>
         Get.offAll(() => const DashboardScreen());
       }
     }
+
+    developer.log('========================================', name: _tag);
   }
 
   @override
@@ -188,7 +197,6 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
                   const SizedBox(height: 40),
-                  // Loading indicator
                   const SizedBox(
                     width: 30,
                     height: 30,

@@ -1,3 +1,4 @@
+// lib/services/local/local_storage_service.dart - FIXED VERSION
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
@@ -10,7 +11,11 @@ class LocalStorageService {
     _prefs = await SharedPreferences.getInstance();
   }
 
-  // Save methods
+  // ============================================
+  // SAVE METHODS
+  // ============================================
+
+  /// Save device info after successful pairing
   static Future<void> saveDeviceInfo({
     required String deviceId,
     required String familyCode,
@@ -20,64 +25,80 @@ class LocalStorageService {
     await _prefs.setString(AppConstants.keyFamilyCode, familyCode);
     await _prefs.setInt(AppConstants.keyParentId, parentId);
     await _prefs.setBool(AppConstants.keyIsPaired, true);
-
-    // Generate child ID (can be UUID or device-specific)
-    final childId = '${deviceId}_${DateTime.now().millisecondsSinceEpoch}';
-    await _prefs.setString(AppConstants.keyChildId, childId);
   }
 
+  /// Save FCM token
+  static Future<void> saveFcmToken(String token) async {
+    await _prefs.setString(AppConstants.keyFcmToken, token);
+  }
+
+  /// Save auth token (if needed for future features)
   static Future<void> saveAuthToken(String token) async {
     await _secureStorage.write(key: AppConstants.keyAuthToken, value: token);
   }
 
-  // BARU: Save permission completion status
+  /// Save permission completion status
   static Future<void> setPermissionCompleted(bool completed) async {
     await _prefs.setBool(AppConstants.keyPermissionCompleted, completed);
   }
 
-  // Get methods
+  // ============================================
+  // GET METHODS
+  // ============================================
+
+  /// Get device ID (THIS IS THE CHILD IDENTIFIER!)
   static Future<String?> getDeviceId() async {
     return _prefs.getString(AppConstants.keyDeviceId);
   }
 
-  static Future<String?> getChildId() async {
-    return _prefs.getString(AppConstants.keyChildId);
-  }
-
+  /// Get family code
   static Future<String?> getFamilyCode() async {
     return _prefs.getString(AppConstants.keyFamilyCode);
   }
 
+  /// Get pairing status
   static Future<bool> getIsPaired() async {
     return _prefs.getBool(AppConstants.keyIsPaired) ?? false;
   }
 
+  /// Get parent ID
   static Future<int?> getParentId() async {
     return _prefs.getInt(AppConstants.keyParentId);
   }
 
+  /// Get FCM token
+  static Future<String?> getFcmToken() async {
+    return _prefs.getString(AppConstants.keyFcmToken);
+  }
+
+  /// Get auth token
   static Future<String?> getAuthToken() async {
     return await _secureStorage.read(key: AppConstants.keyAuthToken);
   }
 
-  // BARU: Get permission completion status
+  /// Get permission completion status
   static Future<bool> isPermissionCompleted() async {
     return _prefs.getBool(AppConstants.keyPermissionCompleted) ?? false;
   }
 
-  // Clear methods
+  // ============================================
+  // CLEAR METHODS
+  // ============================================
+
+  /// Clear all data
   static Future<void> clearAll() async {
     await _prefs.clear();
     await _secureStorage.deleteAll();
   }
 
+  /// Clear pairing data only
   static Future<void> clearPairing() async {
     await _prefs.remove(AppConstants.keyDeviceId);
-    await _prefs.remove(AppConstants.keyChildId);
     await _prefs.remove(AppConstants.keyFamilyCode);
     await _prefs.remove(AppConstants.keyParentId);
     await _prefs.setBool(AppConstants.keyIsPaired, false);
     await _prefs.remove(AppConstants.keyPermissionCompleted);
+    await _prefs.remove(AppConstants.keyFcmToken);
     await _secureStorage.delete(key: AppConstants.keyAuthToken);
   }
 }
