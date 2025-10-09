@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Firebase Configuration -->
+    <string name="default_web_client_id" translatable="false">268751609895-web-client-id</string>
+    <string name="firebase_database_url" translatable="false">https://parental-control-780ea.firebaseio.com</string>
+    <string name="gcm_defaultSenderId" translatable="false">268751609895</string>
+    <string name="google_api_key" translatable="false">AIzaSyBFLTn_TD_LRyaLfL7hYv14LimRQco5UJk</string>
+    <string name="google_app_id" translatable="false">1:268751609895:android:1d36cb650138a19aec2e02</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBFLTn_TD_LRyaLfL7hYv14LimRQco5UJk</string>
+    <string name="google_storage_bucket" translatable="false">parental-control-780ea.firebasestorage.app</string>
+    <string name="project_id" translatable="false">parental-control-780ea</string>
+</resources>

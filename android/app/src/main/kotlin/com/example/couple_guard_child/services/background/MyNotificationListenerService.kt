@@ -56,25 +56,17 @@ class MyNotificationListenerService : NotificationListenerService() {
                 Context.MODE_PRIVATE
             )
             
-            // PENTING: Key harus sama dengan Flutter (flutter.device_id)
+            // ✅ FIX: Gunakan device_id yang di-pair (bukan Android ID)
             cachedDeviceId = prefs.getString("flutter.device_id", null)
             
             if (cachedDeviceId.isNullOrEmpty()) {
                 Log.e(TAG, "❌ Device ID NOT FOUND in SharedPreferences!")
                 Log.e(TAG, "Available keys: ${prefs.all.keys}")
                 
-                // Fallback: Generate dari Android ID
-                cachedDeviceId = android.provider.Settings.Secure.getString(
-                    applicationContext.contentResolver,
-                    android.provider.Settings.Secure.ANDROID_ID
-                )
-                
-                if (!cachedDeviceId.isNullOrEmpty()) {
-                    // Save untuk next time
-                    prefs.edit().putString("flutter.device_id", cachedDeviceId).apply()
-                    prefs.edit().putBoolean("flutter.is_paired", true).apply()
-                    Log.w(TAG, "⚠️ Device ID generated from Android ID: $cachedDeviceId")
-                }
+                // ❌ JANGAN GUNAKAN Android ID sebagai fallback!
+                // Notification akan gagal 422 jika device tidak paired
+                Log.e(TAG, "❌ Device not paired - cannot send notifications")
+                cachedDeviceId = null
             } else {
                 Log.d(TAG, "✅ Device ID from SharedPreferences: $cachedDeviceId")
             }
