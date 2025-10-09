@@ -1,13 +1,13 @@
-// controllers/pairing_controller.dart
 import 'package:get/get.dart';
+import 'package:flutter/services.dart'; // ✅ ADD
 import '../services/api/device_service.dart';
 import '../services/local/local_storage_service.dart';
 import 'dart:developer' as developer;
 
 class PairingController extends GetxController {
   static const String _tag = 'PairingController';
+  static const _platform = MethodChannel('location_worker_channel'); // ✅ ADD
 
-  // Use lazy getter instead of eager initialization
   DeviceService get _deviceService => Get.find<DeviceService>();
 
   final RxBool isLoading = false.obs;
@@ -60,6 +60,14 @@ class PairingController extends GetxController {
           parentId: response.device!.parentId ?? 0,
         );
         developer.log('Device info saved to local storage', name: _tag);
+
+        // ✅ ADD: Start WorkManager after successful pairing
+        try {
+          await _platform.invokeMethod('startPeriodicLocation');
+          developer.log('✅ WorkManager scheduled after pairing', name: _tag);
+        } catch (e) {
+          developer.log('Failed to start WorkManager', name: _tag, error: e);
+        }
 
         Get.snackbar(
           'Success',

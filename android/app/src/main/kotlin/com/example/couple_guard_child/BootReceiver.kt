@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.example.couple_guard_child.workers.LocationWorkManager
+import com.example.couple_guard_child.utils.ApiClient
 
 class BootReceiver : BroadcastReceiver() {
     companion object {
@@ -13,24 +15,19 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             Log.d(TAG, "========================================")
-            Log.d(TAG, "BOOT COMPLETED - Device rebooted")
+            Log.d(TAG, "🔄 BOOT COMPLETED - Device rebooted")
             
             try {
-                // Check SharedPreferences if device is paired
-                val prefs = context.getSharedPreferences(
-                    "FlutterSharedPreferences", 
-                    Context.MODE_PRIVATE
-                )
-                val isPaired = prefs.getBoolean("flutter.is_paired", false)
-                val deviceId = prefs.getString("flutter.device_id", null)
+                val isPaired = ApiClient.isPaired(context)
+                val deviceId = ApiClient.getDeviceId(context)
                 
                 Log.d(TAG, "Pairing status: $isPaired")
-                Log.d(TAG, "Device ID: $deviceId")
+                Log.d(TAG, "Device ID: ${deviceId?.substring(0, 8)}...")
                 
-                // CRITICAL: Only start service if PAIRED
                 if (isPaired && !deviceId.isNullOrEmpty()) {
-                    Log.d(TAG, "✅ Device is PAIRED - Starting service")
+                    Log.d(TAG, "✅ Device is PAIRED - Starting services")
                     
+                    // ✅ Start background service
                     val serviceIntent = Intent(
                         context, 
                         id.flutter.flutter_background_service.BackgroundService::class.java
@@ -38,13 +35,16 @@ class BootReceiver : BroadcastReceiver() {
                     
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         context.startForegroundService(serviceIntent)
-                        Log.d(TAG, "Started foreground service")
                     } else {
                         context.startService(serviceIntent)
-                        Log.d(TAG, "Started service")
                     }
+                    
+                    // ✅ Schedule periodic location updates
+                    LocationWorkManager.schedulePeriodicLocationUpdates(context)
+                    
+                    Log.d(TAG, "✅ All services started")
                 } else {
-                    Log.d(TAG, "❌ Device NOT paired - Skipping service start")
+                    Log.d(TAG, "❌ Device NOT paired - Skipping")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error in BootReceiver", e)

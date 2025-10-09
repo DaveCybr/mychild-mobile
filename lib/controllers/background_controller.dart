@@ -255,22 +255,22 @@ class BackgroundController extends GetxController {
   }
 
   /// Refresh service status
-  Future<void> refreshStatus() async {
-    developer.log('Refreshing service status...', name: _tag);
+  // Future<void> refreshStatus() async {
+  //   developer.log('Refreshing service status...', name: _tag);
 
-    try {
-      final isRunning = await BackgroundServiceManager.isServiceRunning();
-      servicesRunning.value = isRunning;
+  //   try {
+  //     final isRunning = await BackgroundServiceManager.isServiceRunning();
+  //     servicesRunning.value = isRunning;
 
-      if (isRunning) {
-        BackgroundServiceManager.refreshServiceStatus();
-      }
+  //     if (isRunning) {
+  //       BackgroundServiceManager.refreshServiceStatus();
+  //     }
 
-      developer.log('Service status: $isRunning', name: _tag);
-    } catch (e) {
-      developer.log('Error refreshing status', name: _tag, error: e);
-    }
-  }
+  //     developer.log('Service status: $isRunning', name: _tag);
+  //   } catch (e) {
+  //     developer.log('Error refreshing status', name: _tag, error: e);
+  //   }
+  // }
 
   @override
   void onClose() {

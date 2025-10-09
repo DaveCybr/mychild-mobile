@@ -1,119 +1,53 @@
 package com.example.couple_guard_child.services.background
 
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import io.flutter.plugin.common.MethodChannel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
-import android.content.SharedPreferences
-import android.content.Context
-import android.os.Handler
-import android.os.Looper
+import com.example.couple_guard_child.utils.ApiClient
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
 
 class MyNotificationListenerService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "NotifListenerService"
-        private const val API_URL = "https://parentalcontrol.satelliteorbit.cloud/api/device/notifications"
-        
-        // Static reference untuk MethodChannel dari MainActivity
         var methodChannel: MethodChannel? = null
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
-        
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private val mainHandler = Handler(Looper.getMainLooper())
-    
-    // Cache device ID untuk performa
-    private var cachedDeviceId: String? = null
-    
-    /**
-     * Get Device ID dari SharedPreferences
-     * RENAMED: getStoredDeviceId() to avoid conflict with superclass
-     */
-    private fun getStoredDeviceId(): String? {
-        // Return cached jika sudah ada
-        if (cachedDeviceId != null && cachedDeviceId!!.isNotEmpty()) {
-            return cachedDeviceId
-        }
-        
-        return try {
-            val prefs: SharedPreferences = applicationContext.getSharedPreferences(
-                "FlutterSharedPreferences", 
-                Context.MODE_PRIVATE
-            )
-            
-            // ✅ FIX: Gunakan device_id yang di-pair (bukan Android ID)
-            cachedDeviceId = prefs.getString("flutter.device_id", null)
-            
-            if (cachedDeviceId.isNullOrEmpty()) {
-                Log.e(TAG, "❌ Device ID NOT FOUND in SharedPreferences!")
-                Log.e(TAG, "Available keys: ${prefs.all.keys}")
-                
-                // ❌ JANGAN GUNAKAN Android ID sebagai fallback!
-                // Notification akan gagal 422 jika device tidak paired
-                Log.e(TAG, "❌ Device not paired - cannot send notifications")
-                cachedDeviceId = null
-            } else {
-                Log.d(TAG, "✅ Device ID from SharedPreferences: $cachedDeviceId")
-            }
-            
-            cachedDeviceId
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error getting device ID", e)
-            null
-        }
-    }
+    private val executor = Executors.newFixedThreadPool(3) as ThreadPoolExecutor
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "========================================")
-        Log.d(TAG, "SERVICE CREATED")
-        
-        // Pre-load device ID
-        val deviceId = getStoredDeviceId()
-        Log.d(TAG, "Device ID: $deviceId")
-        Log.d(TAG, "Device ID status: ${if (deviceId.isNullOrEmpty()) "EMPTY/NULL" else "OK"}")
-        Log.d(TAG, "MethodChannel status: ${if (methodChannel != null) "CONNECTED" else "NULL"}")
+        Log.d(TAG, "📱 NOTIFICATION LISTENER SERVICE CREATED")
+        Log.d(TAG, "PID: ${android.os.Process.myPid()}")
         Log.d(TAG, "========================================")
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.d(TAG, "========================================")
-        Log.d(TAG, "LISTENER CONNECTED")
+        Log.d(TAG, "✅ LISTENER CONNECTED")
         
-        val deviceId = getStoredDeviceId()
-        Log.d(TAG, "Device ID on connect: $deviceId")
+        val isPaired = ApiClient.isPaired(applicationContext)
+        val deviceId = ApiClient.getDeviceId(applicationContext)
         
-        if (deviceId.isNullOrEmpty()) {
-            Log.e(TAG, "⚠️ WARNING: Device ID is NULL/EMPTY")
-            Log.e(TAG, "⚠️ Notifications will NOT be sent to server!")
-        } else {
-            Log.d(TAG, "✅ Ready to monitor notifications")
-        }
-        
+        Log.d(TAG, "Device paired: $isPaired")
+        Log.d(TAG, "Device ID: ${deviceId?.substring(0, 8) ?: "NULL"}...")
         Log.d(TAG, "========================================")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        Log.w(TAG, "========================================")
         Log.w(TAG, "⚠️ LISTENER DISCONNECTED")
-        // Clear cache
-        cachedDeviceId = null
+        Log.w(TAG, "Attempting to reconnect...")
+        Log.w(TAG, "========================================")
+        
+        // ✅ FIX: Request rebind
+        requestRebind(android.content.ComponentName(this, javaClass))
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -124,9 +58,15 @@ class MyNotificationListenerService : NotificationListenerService() {
             val packageName = sbn.packageName
             Log.d(TAG, "Package: $packageName")
             
-            // Skip own notifications
             if (packageName == applicationContext.packageName) {
                 Log.d(TAG, "⏭️ Skipping own notification")
+                Log.d(TAG, "----------------------------------------")
+                return
+            }
+            
+            if (!ApiClient.isPaired(applicationContext)) {
+                Log.w(TAG, "⚠️ Device not paired, skipping")
+                Log.d(TAG, "----------------------------------------")
                 return
             }
             
@@ -135,27 +75,24 @@ class MyNotificationListenerService : NotificationListenerService() {
 
             val title = extras.getCharSequence("android.title")?.toString() ?: ""
             val text = extras.getCharSequence("android.text")?.toString() ?: ""
-            val timestamp = sbn.postTime
 
             Log.d(TAG, "Title: $title")
-            Log.d(TAG, "Text: $text")
-            Log.d(TAG, "Timestamp: $timestamp")
+            Log.d(TAG, "Text: ${text.take(50)}${if (text.length > 50) "..." else ""}")
 
-            // ✅ FIX: Skip empty notifications
             if (title.isBlank() && text.isBlank()) {
                 Log.w(TAG, "⏭️ SKIPPED: Empty title AND content")
+                Log.d(TAG, "----------------------------------------")
                 return
             }
             
-            // ✅ FIX: Use fallback if one is empty
             val finalTitle = if (title.isBlank()) packageName else title
             val finalContent = if (text.isBlank()) "New notification" else text
 
-            // PRIORITY 1: Send to server (most reliable)
-            sendToServer(packageName, finalTitle, finalContent)
+            executor.execute {
+                sendToServerImmediate(packageName, finalTitle, finalContent)
+            }
             
-            // PRIORITY 2: Send to Flutter UI (optional)
-            sendToFlutter(packageName, finalTitle, finalContent, timestamp)
+            sendToFlutter(packageName, finalTitle, finalContent, sbn.postTime)
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ ERROR processing notification", e)
@@ -164,9 +101,34 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.d(TAG, "----------------------------------------")
     }
 
-    /**
-     * Send notification data to Flutter via MethodChannel
-     */
+    private fun sendToServerImmediate(appName: String, title: String, content: String) {
+        try {
+            Log.d(TAG, "=== SENDING TO SERVER (IMMEDIATE) ===")
+            Log.d(TAG, "Thread: ${Thread.currentThread().name}")
+            
+            val startTime = System.currentTimeMillis()
+            
+            val success = ApiClient.sendNotification(
+                applicationContext,
+                appName,
+                title,
+                content
+            )
+            
+            val duration = System.currentTimeMillis() - startTime
+            
+            if (success) {
+                Log.d(TAG, "✅ SUCCESS: Notification sent in ${duration}ms")
+            } else {
+                Log.e(TAG, "❌ FAILED: Could not send notification")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ EXCEPTION sending to server", e)
+            e.printStackTrace()
+        }
+    }
+
     private fun sendToFlutter(
         packageName: String,
         title: String,
@@ -175,12 +137,10 @@ class MyNotificationListenerService : NotificationListenerService() {
     ) {
         try {
             if (methodChannel == null) {
-                Log.w(TAG, "⚠️ MethodChannel is NULL - Flutter UI not available")
                 return
             }
             
-            // Post to main thread (required for MethodChannel)
-            mainHandler.post {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
                 try {
                     methodChannel?.invokeMethod(
                         "onNotificationReceived",
@@ -194,77 +154,33 @@ class MyNotificationListenerService : NotificationListenerService() {
                     
                     Log.d(TAG, "✅ Sent to Flutter UI")
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to invoke Flutter method", e)
+                    // Silently ignore
                 }
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to send to Flutter", e)
+            // Ignore
         }
     }
 
-    /**
-     * Send notification to server API
-     */
-    private fun sendToServer(appName: String, title: String, content: String) {
-        scope.launch {
-            try {
-                Log.d(TAG, "=== SENDING TO SERVER ===")
-                
-                val deviceId = getStoredDeviceId()
-                if (deviceId.isNullOrEmpty()) {
-                    Log.e(TAG, "❌ CRITICAL: Device ID is NULL/EMPTY")
-                    Log.e(TAG, "❌ Cannot send without Device ID")
-                    return@launch
-                }
-                
-                Log.d(TAG, "Device ID: $deviceId")
-                Log.d(TAG, "App: $appName")
-                Log.d(TAG, "Title: $title")
-                Log.d(TAG, "Content: ${content.take(50)}${if (content.length > 50) "..." else ""}")
-                
-                val json = JSONObject().apply {
-                    put("device_id", deviceId)
-                    put("app_name", appName)
-                    put("title", title)
-                    put("content", content)
-                    put("timestamp", System.currentTimeMillis())
-                }
+    // ✅ FIX: Override onTaskRemoved
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.w(TAG, "========================================")
+        Log.w(TAG, "⚠️ TASK REMOVED - App swiped from recent")
+        Log.w(TAG, "Service will continue running...")
+        Log.w(TAG, "========================================")
+        
+        // Request rebind to ensure service stays connected
+        requestRebind(android.content.ComponentName(this, javaClass))
+    }
 
-                val jsonString = json.toString()
-                Log.d(TAG, "JSON Payload: $jsonString")
-                
-                val body = jsonString.toRequestBody("application/json".toMediaType())
-
-                val request = Request.Builder()
-                    .url(API_URL)
-                    .post(body)
-                    .addHeader("Content-Type", "application/json")
-                    .addHeader("Accept", "application/json")
-                    .build()
-
-                Log.d(TAG, "Executing HTTP POST to: $API_URL")
-                
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string()
-                
-                Log.d(TAG, "=== SERVER RESPONSE ===")
-                Log.d(TAG, "Status: ${response.code}")
-                Log.d(TAG, "Body: $responseBody")
-                
-                if (response.isSuccessful) {
-                    Log.d(TAG, "✅ SUCCESS: Notification sent to server")
-                } else {
-                    Log.e(TAG, "❌ FAILED: ${response.code} - $responseBody")
-                }
-                
-                response.close()
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ EXCEPTION sending to server", e)
-                Log.e(TAG, "Exception: ${e.javaClass.name}: ${e.message}")
-                e.printStackTrace()
-            }
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.w(TAG, "========================================")
+        Log.w(TAG, "⚠️ SERVICE DESTROYED")
+        Log.w(TAG, "Shutting down executor...")
+        Log.w(TAG, "========================================")
+        executor.shutdown()
     }
 }

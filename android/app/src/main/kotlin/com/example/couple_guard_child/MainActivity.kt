@@ -3,21 +3,20 @@ package com.example.couple_guard_child
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
+import com.example.couple_guard_child.workers.LocationWorkManager
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
+    private val LOCATION_CHANNEL = "location_worker_channel"
     private val TAG = "MainActivity"
     
-    // ✅ CRITICAL: Notification Channel IDs (MUST match background_service_manager.dart)
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "child_app_background"
         const val NOTIFICATION_CHANNEL_NAME = "Background Service"
@@ -29,10 +28,9 @@ class MainActivity: FlutterActivity() {
         Log.d(TAG, "========================================")
         Log.d(TAG, "MainActivity onCreate()")
         
-        // ✅ STEP 1: Create notification channel BEFORE service starts
         createNotificationChannel()
         
-        Log.d(TAG, "Notification channel created")
+        Log.d(TAG, "✅ Notification channel created")
         Log.d(TAG, "========================================")
     }
 
@@ -41,20 +39,19 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "Configuring Flutter Engine")
         
-        val channel = MethodChannel(
+        // Notification listener channel
+        val notifChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger, 
             CHANNEL
         )
         
-        // Set static reference untuk NotificationListenerService
-        MyNotificationListenerService.methodChannel = channel
-        Log.d(TAG, "MethodChannel registered and set to NotificationListenerService")
+        MyNotificationListenerService.methodChannel = notifChannel
+        Log.d(TAG, "✅ Notification MethodChannel registered")
         
-        channel.setMethodCallHandler { call, result ->
+        notifChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "checkNotificationPermission" -> {
                     val enabled = isNotificationServiceEnabled()
-                    Log.d(TAG, "Permission check result: $enabled")
                     result.success(enabled)
                 }
                 "openNotificationSettings" -> {
@@ -65,23 +62,44 @@ class MainActivity: FlutterActivity() {
                     moveTaskToBack(true)
                     result.success(null)
                 }
-                else -> {
-                    result.notImplemented()
-                }
+                else -> result.notImplemented()
             }
         }
+        
+        // Location worker channel
+        val locationChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            LOCATION_CHANNEL
+        )
+        
+        locationChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startPeriodicLocation" -> {
+                    Log.d(TAG, "📍 Starting periodic location updates")
+                    LocationWorkManager.schedulePeriodicLocationUpdates(applicationContext)
+                    result.success(true)
+                }
+                "stopPeriodicLocation" -> {
+                    Log.d(TAG, "🛑 Stopping periodic location updates")
+                    LocationWorkManager.cancelPeriodicLocationUpdates(applicationContext)
+                    result.success(true)
+                }
+                "isLocationWorkScheduled" -> {
+                    val isScheduled = LocationWorkManager.isWorkScheduled(applicationContext)
+                    result.success(isScheduled)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        
+        Log.d(TAG, "✅ Location MethodChannel registered")
     }
     
-    /**
-     * ✅ CRITICAL FIX: Create notification channel for foreground service
-     * This MUST be called before starting the background service
-     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 
-                // Check if channel already exists
                 val existingChannel = notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
                 
                 if (existingChannel == null) {
@@ -90,44 +108,30 @@ class MainActivity: FlutterActivity() {
                     val channel = NotificationChannel(
                         NOTIFICATION_CHANNEL_ID,
                         NOTIFICATION_CHANNEL_NAME,
-                        NotificationManager.IMPORTANCE_LOW // LOW = tidak ada suara
+                        NotificationManager.IMPORTANCE_LOW
                     ).apply {
                         description = "Keeps the app running in background for family safety"
                         setShowBadge(false)
                         enableLights(false)
                         enableVibration(false)
-                        setSound(null, null) // No sound
+                        setSound(null, null)
                     }
                     
                     notificationManager.createNotificationChannel(channel)
-                    
-                    Log.d(TAG, "✅ Notification channel created successfully")
+                    Log.d(TAG, "✅ Notification channel created")
                 } else {
                     Log.d(TAG, "✅ Notification channel already exists")
-                }
-                
-                // Verify channel exists
-                val verifyChannel = notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
-                if (verifyChannel != null) {
-                    Log.d(TAG, "✅ Channel verification PASSED")
-                    Log.d(TAG, "   - ID: ${verifyChannel.id}")
-                    Log.d(TAG, "   - Name: ${verifyChannel.name}")
-                    Log.d(TAG, "   - Importance: ${verifyChannel.importance}")
-                } else {
-                    Log.e(TAG, "❌ Channel verification FAILED!")
                 }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to create notification channel", e)
             }
-        } else {
-            Log.d(TAG, "Android version < O, notification channel not required")
         }
     }
 
     private fun isNotificationServiceEnabled(): Boolean {
         val pkgName = packageName
-        val flat = Settings.Secure.getString(
+        val flat = android.provider.Settings.Secure.getString(
             contentResolver,
             "enabled_notification_listeners"
         )
@@ -138,23 +142,12 @@ class MainActivity: FlutterActivity() {
             return enabled
         }
         
-        Log.d(TAG, "Notification listener settings is null or empty")
         return false
     }
 
     private fun openNotificationListenerSettings() {
         Log.d(TAG, "Opening notification listener settings")
-        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         startActivity(intent)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "MainActivity resumed")
-    }
-
-    override fun onPause() {
-        super.onPause()
-        Log.d(TAG, "MainActivity paused")
     }
 }

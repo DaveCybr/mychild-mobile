@@ -1,5 +1,6 @@
 // lib/screens/splash/splash_screen.dart - UPDATED
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/fcm/fcm_service.dart';
@@ -20,6 +21,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   static const String _tag = 'SplashScreen';
+  static const _platform = MethodChannel('location_worker_channel');
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -61,13 +63,11 @@ class _SplashScreenState extends State<SplashScreen>
       final serverData = await deviceService.verifyPairing();
 
       if (serverData == null) {
-        // Device not paired on server
         developer.log(
           'Device not paired on server, clearing local data',
           name: _tag,
           level: 900,
         );
-
         await LocalStorageService.clearPairing();
 
         Get.snackbar(
@@ -100,14 +100,20 @@ class _SplashScreenState extends State<SplashScreen>
         developer.log('⚠️ No FCM token yet, will sync later', name: _tag);
       }
 
+      // ✅ Step 3.5: Start WorkManager if paired
+      try {
+        await _platform.invokeMethod('startPeriodicLocation');
+        developer.log('✅ WorkManager scheduled', name: _tag);
+      } catch (e) {
+        developer.log('Failed to start WorkManager', name: _tag, error: e);
+      }
+
       // Step 4: Check permission status
       final isPermissionCompleted =
           await LocalStorageService.isPermissionCompleted();
-
       developer.log('Permission completed: $isPermissionCompleted', name: _tag);
 
       if (!isPermissionCompleted) {
-        // Paired but permissions not setup
         Get.offAll(() => const PermissionScreen());
         return;
       }
@@ -122,9 +128,6 @@ class _SplashScreenState extends State<SplashScreen>
         error: e,
         level: 1000,
       );
-
-      // On network error, use local data
-      developer.log('Network error, using local data', name: _tag, level: 900);
 
       final isPermissionCompleted =
           await LocalStorageService.isPermissionCompleted();

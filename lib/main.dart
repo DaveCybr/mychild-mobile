@@ -1,6 +1,5 @@
-// lib/main.dart - UPDATED WITH FCM INTEGRATION
+// lib/main.dart - FIXED VERSION
 import 'package:couple_guard_child/core/bindings/initial_binding.dart';
-import 'package:couple_guard_child/services/fcm/fcm_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,22 @@ import 'services/background/background_service_manager.dart';
 import 'services/local/local_storage_service.dart';
 import 'screens/splash/splash_screen.dart';
 import 'dart:developer' as developer;
+
+/// ✅ FIX: Simplified background handler tanpa dependency GetIt
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // ✅ Initialize Firebase saja
+  await Firebase.initializeApp();
+
+  developer.log('========================================', name: 'FCM');
+  developer.log('📨 Background FCM Message (Flutter)', name: 'FCM');
+  developer.log('Message ID: ${message.messageId}', name: 'FCM');
+  developer.log('Data: ${message.data}', name: 'FCM');
+  developer.log('========================================', name: 'FCM');
+
+  // ✅ Native Android akan handle actual work
+  // Kita hanya log saja di sini untuk debugging
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,23 +49,23 @@ void main() async {
     await LocalStorageService.init();
     developer.log('✅ Local storage initialized', name: 'MAIN');
 
-    // Step 4: Configure background service (don't start yet)
+    // Step 4: Configure background service
     developer.log('Configuring background service...', name: 'MAIN');
     await BackgroundServiceManager.initializeService();
     developer.log('✅ Background service configured', name: 'MAIN');
 
-    // Step 5: Initialize FCM (after local storage is ready)
+    // Step 5: Initialize FCM (simplified)
     developer.log('Initializing FCM...', name: 'MAIN');
-    await FcmHandler.initialize();
+    await _initializeFCM();
     developer.log('✅ FCM initialized', name: 'MAIN');
 
-    // Step 6: Lock orientation to portrait
+    // Step 6: Lock orientation
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
 
-    // Step 7: Set system UI overlay style
+    // Step 7: Set system UI overlay
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -71,6 +86,39 @@ void main() async {
   }
 
   runApp(const ChildApp());
+}
+
+/// ✅ Simplified FCM initialization tanpa FcmHandler.initialize()
+Future<void> _initializeFCM() async {
+  try {
+    // Request permission
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    developer.log(
+      'FCM Permission: ${settings.authorizationStatus}',
+      name: 'FCM',
+    );
+
+    // Get token
+    final token = await messaging.getToken();
+    if (token != null) {
+      developer.log('FCM Token: ${token.substring(0, 20)}...', name: 'FCM');
+      await LocalStorageService.saveFcmToken(token);
+    }
+
+    // Listen for token refresh
+    messaging.onTokenRefresh.listen((newToken) {
+      developer.log('FCM Token refreshed', name: 'FCM');
+      LocalStorageService.saveFcmToken(newToken);
+    });
+  } catch (e) {
+    developer.log('FCM init error', name: 'FCM', error: e);
+  }
 }
 
 class ChildApp extends StatelessWidget {
