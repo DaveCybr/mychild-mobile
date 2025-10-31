@@ -5,12 +5,16 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
 import com.example.couple_guard_child.workers.LocationWorkManager
+import com.example.couple_guard_child.utils.BatteryOptimizationHelper
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
@@ -62,6 +66,14 @@ class MainActivity: FlutterActivity() {
                     moveTaskToBack(true)
                     result.success(null)
                 }
+                "requestBatteryOptimization" -> {
+                    BatteryOptimizationHelper.requestDisableBatteryOptimization(applicationContext)
+                    result.success(null)
+                }
+                "checkBatteryOptimization" -> {
+                    val isIgnoring = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(applicationContext)
+                    result.success(isIgnoring)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -75,8 +87,32 @@ class MainActivity: FlutterActivity() {
         locationChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startPeriodicLocation" -> {
-                    Log.d(TAG, "📍 Starting periodic location updates")
+                    Log.d(TAG, "========================================")
+                    Log.d(TAG, "📍 START PERIODIC LOCATION REQUEST")
+                    
+                    // Check battery optimization
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                        val isIgnoring = powerManager.isIgnoringBatteryOptimizations(packageName)
+                        
+                        Log.d(TAG, "Battery optimization ignored: $isIgnoring")
+                        
+                        if (!isIgnoring) {
+                            Log.w(TAG, "⚠️ WARNING: Battery optimization NOT disabled!")
+                        }
+                    }
+                    
                     LocationWorkManager.schedulePeriodicLocationUpdates(applicationContext)
+                    
+                    // Verify scheduling
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        val isScheduled = LocationWorkManager.isWorkScheduled(applicationContext)
+                        val status = LocationWorkManager.getWorkStatus(applicationContext)
+                        Log.d(TAG, "Verification - Scheduled: $isScheduled")
+                        Log.d(TAG, "Verification - Status: $status")
+                    }, 1000)
+                    
+                    Log.d(TAG, "========================================")
                     result.success(true)
                 }
                 "stopPeriodicLocation" -> {
@@ -86,7 +122,13 @@ class MainActivity: FlutterActivity() {
                 }
                 "isLocationWorkScheduled" -> {
                     val isScheduled = LocationWorkManager.isWorkScheduled(applicationContext)
+                    Log.d(TAG, "Location work scheduled: $isScheduled")
                     result.success(isScheduled)
+                }
+                "getLocationWorkStatus" -> {
+                    val status = LocationWorkManager.getWorkStatus(applicationContext)
+                    Log.d(TAG, "Location work status: $status")
+                    result.success(status)
                 }
                 else -> result.notImplemented()
             }

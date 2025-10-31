@@ -44,6 +44,7 @@ class BackgroundServiceManager {
     developer.log('✅ Service configuration complete', name: _tag);
   }
 
+  // background_service_manager.dart
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
     developer.log('🚀 SERVICE STARTING', name: _tag);
@@ -69,15 +70,12 @@ class BackgroundServiceManager {
         developer.log('Pairing status: $isPaired', name: _tag);
 
         if (isPaired) {
-          // ✅ FIX: Don't start WorkManager from background isolate
-          // WorkManager akan di-start dari main isolate (MainActivity/BootReceiver)
+          // ✅ CRITICAL: WorkManager HARUS di-start dari native MainActivity/BootReceiver
+          // JANGAN start dari sini karena isolate berbeda!
           developer.log(
-            '✅ Device paired - WorkManager handled by native',
+            '✅ Device paired - WorkManager handled by native Android',
             name: _tag,
           );
-
-          // Notification listener already running in native
-          developer.log('✅ Notification listener active', name: _tag);
 
           await service.setForegroundNotificationInfo(
             title: "Family Safety",

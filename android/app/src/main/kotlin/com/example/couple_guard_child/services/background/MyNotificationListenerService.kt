@@ -8,6 +8,8 @@ import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.utils.ApiClient
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.*
 
 class MyNotificationListenerService : NotificationListenerService() {
 
@@ -16,14 +18,34 @@ class MyNotificationListenerService : NotificationListenerService() {
         var methodChannel: MethodChannel? = null
     }
 
-    private val executor = Executors.newFixedThreadPool(3) as ThreadPoolExecutor
+    // ✅ FIX 1: Gunakan CoroutineScope untuk better lifecycle management
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    // ✅ FIX 2: Keep executor tapi dengan proper configuration
+    private val executor = Executors.newFixedThreadPool(
+        3,
+        { runnable ->
+            Thread(runnable).apply {
+                isDaemon = false // Don't let threads die prematurely
+                priority = Thread.NORM_PRIORITY
+                name = "NotifSender-${System.currentTimeMillis()}"
+            }
+        }
+    ) as ThreadPoolExecutor
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "========================================")
         Log.d(TAG, "📱 NOTIFICATION LISTENER SERVICE CREATED")
         Log.d(TAG, "PID: ${android.os.Process.myPid()}")
+        Log.d(TAG, "Thread: ${Thread.currentThread().name}")
         Log.d(TAG, "========================================")
+        
+        // ✅ FIX 3: Configure executor
+        executor.apply {
+            setKeepAliveTime(60, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(false)
+        }
     }
 
     override fun onListenerConnected() {
@@ -36,6 +58,8 @@ class MyNotificationListenerService : NotificationListenerService() {
         
         Log.d(TAG, "Device paired: $isPaired")
         Log.d(TAG, "Device ID: ${deviceId?.substring(0, 8) ?: "NULL"}...")
+        Log.d(TAG, "Executor active threads: ${executor.activeCount}")
+        Log.d(TAG, "Executor queue size: ${executor.queue.size}")
         Log.d(TAG, "========================================")
     }
 
@@ -46,24 +70,22 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.w(TAG, "Attempting to reconnect...")
         Log.w(TAG, "========================================")
         
-        // ✅ FIX: Request rebind
         requestRebind(android.content.ComponentName(this, javaClass))
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val notificationId = "${sbn.packageName}-${sbn.postTime}"
+        
         Log.d(TAG, "----------------------------------------")
         Log.d(TAG, "📱 NEW NOTIFICATION RECEIVED")
+        Log.d(TAG, "ID: $notificationId")
+        Log.d(TAG, "Thread: ${Thread.currentThread().name}")
         
         try {
             val packageName = sbn.packageName
             Log.d(TAG, "Package: $packageName")
             
-            if (packageName == applicationContext.packageName) {
-                Log.d(TAG, "⏭️ Skipping own notification")
-                Log.d(TAG, "----------------------------------------")
-                return
-            }
-            
+            // ✅ FIX 4: Check pairing FIRST
             if (!ApiClient.isPaired(applicationContext)) {
                 Log.w(TAG, "⚠️ Device not paired, skipping")
                 Log.d(TAG, "----------------------------------------")
@@ -79,6 +101,7 @@ class MyNotificationListenerService : NotificationListenerService() {
             Log.d(TAG, "Title: $title")
             Log.d(TAG, "Text: ${text.take(50)}${if (text.length > 50) "..." else ""}")
 
+            // Skip empty notifications
             if (title.isBlank() && text.isBlank()) {
                 Log.w(TAG, "⏭️ SKIPPED: Empty title AND content")
                 Log.d(TAG, "----------------------------------------")
@@ -88,26 +111,73 @@ class MyNotificationListenerService : NotificationListenerService() {
             val finalTitle = if (title.isBlank()) packageName else title
             val finalContent = if (text.isBlank()) "New notification" else text
 
+            // ✅ FIX 5: Check network before sending
+            if (!isNetworkAvailable()) {
+                Log.w(TAG, "⚠️ NO NETWORK - Notification will be queued")
+                // TODO: Queue notification for later
+                Log.d(TAG, "----------------------------------------")
+                return
+            }
+
+            // ✅ FIX 6: Send with better error handling
+            Log.d(TAG, "📤 Queuing notification to executor...")
+            Log.d(TAG, "Executor queue size BEFORE: ${executor.queue.size}")
+            Log.d(TAG, "Executor active threads: ${executor.activeCount}")
+            
             executor.execute {
-                sendToServerImmediate(packageName, finalTitle, finalContent)
+                sendToServerImmediate(
+                    notificationId,
+                    packageName, 
+                    finalTitle, 
+                    finalContent
+                )
             }
             
+            Log.d(TAG, "Executor queue size AFTER: ${executor.queue.size}")
+            
+            // Send to Flutter UI (non-blocking)
             sendToFlutter(packageName, finalTitle, finalContent, sbn.postTime)
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ ERROR processing notification", e)
+            e.printStackTrace()
         }
         
         Log.d(TAG, "----------------------------------------")
     }
 
-    private fun sendToServerImmediate(appName: String, title: String, content: String) {
+    private fun sendToServerImmediate(
+        notificationId: String,
+        appName: String, 
+        title: String, 
+        content: String
+    ) {
+        // ✅ FIX 7: Better logging and error tracking
+        val startTime = System.currentTimeMillis()
+        val threadName = Thread.currentThread().name
+        
         try {
             Log.d(TAG, "=== SENDING TO SERVER (IMMEDIATE) ===")
-            Log.d(TAG, "Thread: ${Thread.currentThread().name}")
+            Log.d(TAG, "Notification ID: $notificationId")
+            Log.d(TAG, "Thread: $threadName")
+            Log.d(TAG, "Executor stats:")
+            Log.d(TAG, "  - Active threads: ${executor.activeCount}")
+            Log.d(TAG, "  - Queue size: ${executor.queue.size}")
+            Log.d(TAG, "  - Completed tasks: ${executor.completedTaskCount}")
             
-            val startTime = System.currentTimeMillis()
+            // ✅ FIX 8: Check network again before sending
+            if (!isNetworkAvailable()) {
+                Log.e(TAG, "❌ NETWORK LOST during send")
+                return
+            }
             
+            // ✅ FIX 9: Check if device is still paired
+            if (!ApiClient.isPaired(applicationContext)) {
+                Log.e(TAG, "❌ Device unpaired during send")
+                return
+            }
+            
+            Log.d(TAG, "🚀 Making API call...")
             val success = ApiClient.sendNotification(
                 applicationContext,
                 appName,
@@ -119,13 +189,32 @@ class MyNotificationListenerService : NotificationListenerService() {
             
             if (success) {
                 Log.d(TAG, "✅ SUCCESS: Notification sent in ${duration}ms")
+                Log.d(TAG, "   App: $appName")
+                Log.d(TAG, "   Title: $title")
             } else {
-                Log.e(TAG, "❌ FAILED: Could not send notification")
+                Log.e(TAG, "❌ FAILED: Could not send notification (${duration}ms)")
+                Log.e(TAG, "   This might be:")
+                Log.e(TAG, "   - Server rejected request")
+                Log.e(TAG, "   - Network timeout")
+                Log.e(TAG, "   - Invalid device_id")
             }
             
+            Log.d(TAG, "=== END SENDING (${duration}ms) ===")
+            
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.e(TAG, "❌ TIMEOUT: Server took too long", e)
+        } catch (e: java.net.UnknownHostException) {
+            Log.e(TAG, "❌ DNS ERROR: Cannot resolve hostname", e)
+        } catch (e: java.net.ConnectException) {
+            Log.e(TAG, "❌ CONNECTION ERROR: Cannot connect to server", e)
+        } catch (e: javax.net.ssl.SSLException) {
+            Log.e(TAG, "❌ SSL ERROR: Certificate problem", e)
         } catch (e: Exception) {
             Log.e(TAG, "❌ EXCEPTION sending to server", e)
             e.printStackTrace()
+        } finally {
+            val totalDuration = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ Total time in thread: ${totalDuration}ms")
         }
     }
 
@@ -137,6 +226,7 @@ class MyNotificationListenerService : NotificationListenerService() {
     ) {
         try {
             if (methodChannel == null) {
+                Log.w(TAG, "⚠️ MethodChannel is null, cannot send to Flutter")
                 return
             }
             
@@ -154,24 +244,61 @@ class MyNotificationListenerService : NotificationListenerService() {
                     
                     Log.d(TAG, "✅ Sent to Flutter UI")
                 } catch (e: Exception) {
-                    // Silently ignore
+                    Log.w(TAG, "Failed to send to Flutter: ${e.message}")
                 }
             }
             
         } catch (e: Exception) {
-            // Ignore
+            Log.w(TAG, "Exception in sendToFlutter: ${e.message}")
         }
     }
 
-    // ✅ FIX: Override onTaskRemoved
+    // ✅ FIX 10: Add network check
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val connectivityManager = getSystemService(
+                android.content.Context.CONNECTIVITY_SERVICE
+            ) as android.net.ConnectivityManager
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val network = connectivityManager.activeNetwork
+                val capabilities = connectivityManager.getNetworkCapabilities(network)
+                val hasNetwork = capabilities != null
+                
+                Log.d(TAG, "Network available: $hasNetwork")
+                if (hasNetwork) {
+                    Log.d(TAG, "Network type: ${
+                        when {
+                            capabilities!!.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
+                            capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "CELLULAR"
+                            else -> "OTHER"
+                        }
+                    }")
+                }
+                
+                hasNetwork
+            } else {
+                @Suppress("DEPRECATION")
+                val networkInfo = connectivityManager.activeNetworkInfo
+                val isConnected = networkInfo?.isConnected == true
+                Log.d(TAG, "Network available (legacy): $isConnected")
+                isConnected
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking network", e)
+            false
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.w(TAG, "========================================")
         Log.w(TAG, "⚠️ TASK REMOVED - App swiped from recent")
         Log.w(TAG, "Service will continue running...")
+        Log.w(TAG, "Executor active: ${executor.activeCount} threads")
+        Log.w(TAG, "Executor queued: ${executor.queue.size} tasks")
         Log.w(TAG, "========================================")
         
-        // Request rebind to ensure service stays connected
         requestRebind(android.content.ComponentName(this, javaClass))
     }
 
@@ -180,7 +307,22 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.w(TAG, "========================================")
         Log.w(TAG, "⚠️ SERVICE DESTROYED")
         Log.w(TAG, "Shutting down executor...")
+        Log.w(TAG, "Remaining tasks: ${executor.queue.size}")
         Log.w(TAG, "========================================")
-        executor.shutdown()
+        
+        try {
+            // ✅ FIX 11: Graceful shutdown
+            serviceScope.cancel()
+            
+            executor.shutdown()
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                Log.w(TAG, "⚠️ Executor did not terminate in time, forcing shutdown")
+                executor.shutdownNow()
+            }
+            Log.d(TAG, "✅ Executor shutdown complete")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error shutting down executor", e)
+            executor.shutdownNow()
+        }
     }
 }

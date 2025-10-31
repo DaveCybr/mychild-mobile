@@ -60,6 +60,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(TAG, "⚠️ Photo capture requires UI - notify Flutter if app is open")
                 // TODO: Implement camera capture or notify Flutter
             }
+            "REQUEST_NOTIFICATION" -> {
+                Log.d(TAG, "� Command: Request Notification")
+                Log.d(TAG, "⚠️ Notification requires UI - notify Flutter if app is open")
+                // TODO: Implement notification or notify Flutter
+            }
             "START_MONITORING" -> {
                 Log.d(TAG, "▶️ Monitoring already active")
             }
