@@ -84,11 +84,15 @@ class BootReceiver : BroadcastReceiver() {
                 Log.d(TAG, "✅ Service started")
             }
             
-            // 2. Schedule location work
+            // 2. Schedule location work (includes watchdog)
             LocationWorkManager.schedulePeriodicLocationUpdates(context)
             Log.d(TAG, "✅ Location work scheduled")
             
-            // 3. Verify after delay
+            // 3. ✨ NEW: Schedule AlarmManager keep-alive
+            ServiceKeepAliveManager.scheduleServiceCheck(context)
+            Log.d(TAG, "✅ Keep-alive alarm scheduled")
+            
+            // 4. Verify after delay
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 verifyStartup(context)
             }, 3000)
@@ -102,11 +106,15 @@ class BootReceiver : BroadcastReceiver() {
     private fun verifyStartup(context: Context) {
         try {
             val isScheduled = LocationWorkManager.isWorkScheduled(context)
+            val watchdogScheduled = LocationWorkManager.isWatchdogScheduled(context) // ✨ NEW
+            val alarmScheduled = ServiceKeepAliveManager.isAlarmScheduled(context) // ✨ NEW
             val status = LocationWorkManager.getWorkStatus(context)
             
             Log.d(TAG, "========================================")
             Log.d(TAG, "📊 STARTUP VERIFICATION")
-            Log.d(TAG, "Work scheduled: $isScheduled")
+            Log.d(TAG, "Location work scheduled: $isScheduled")
+            Log.d(TAG, "Watchdog scheduled: $watchdogScheduled") // ✨ NEW
+            Log.d(TAG, "AlarmManager scheduled: $alarmScheduled") // ✨ NEW
             Log.d(TAG, "Work status: $status")
             Log.d(TAG, "========================================")
             

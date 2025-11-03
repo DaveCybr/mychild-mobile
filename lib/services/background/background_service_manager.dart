@@ -64,23 +64,27 @@ class BackgroundServiceManager {
         await service.setAsForegroundService();
         developer.log('✅ Foreground service started', name: _tag);
 
-        // Initialize local storage
         await LocalStorageService.init();
         final isPaired = await LocalStorageService.getIsPaired();
 
         developer.log('Pairing status: $isPaired', name: _tag);
 
         if (isPaired) {
-          // ✅ CRITICAL: WorkManager HARUS di-start dari native MainActivity/BootReceiver
-          // JANGAN start dari sini karena isolate berbeda!
-          developer.log(
-            '✅ Device paired - WorkManager handled by native Android',
-            name: _tag,
-          );
+          // ✅ Pastikan WorkManager + Watchdog running
+          try {
+            await _platform.invokeMethod('startPeriodicLocation');
+            developer.log('✅ WorkManager scheduled from service', name: _tag);
+          } catch (e) {
+            developer.log(
+              'Failed to schedule WorkManager',
+              name: _tag,
+              error: e,
+            );
+          }
 
           await service.setForegroundNotificationInfo(
-            title: "Family Safety",
-            content: "Monitoring active",
+            title: "Family Safety Active",
+            content: "All monitoring services running",
           );
         } else {
           await service.setForegroundNotificationInfo(
@@ -99,12 +103,24 @@ class BackgroundServiceManager {
       }
     }
 
-    // Heartbeat
-    Timer.periodic(const Duration(seconds: 60), (timer) async {
+    // ✨ Enhanced heartbeat dengan status update
+    Timer.periodic(const Duration(minutes: 5), (timer) async {
       if (service is AndroidServiceInstance) {
         try {
           if (await service.isForegroundService()) {
             final now = DateTime.now();
+
+            // Send heartbeat to server
+            try {
+              final deviceId = await LocalStorageService.getDeviceId();
+              if (deviceId != null) {
+                // Call native method untuk update status
+                await _platform.invokeMethod('sendHeartbeat');
+              }
+            } catch (e) {
+              developer.log('Heartbeat failed', name: _tag, error: e);
+            }
+
             await service.setForegroundNotificationInfo(
               title: "Family Safety Active",
               content:

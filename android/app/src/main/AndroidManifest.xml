@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" android:minSdkVersion="34"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" android:minSdkVersion="34"/>
 
     <!-- CAMERA -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -49,6 +50,9 @@
     <!-- SYSTEM -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:label="Family Safety"
@@ -87,6 +91,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Family safety monitoring and location tracking" />
         </service>
+
+        <service
+            android:name=".services.CameraBackgroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
         
         <receiver 
             android:name=".BootReceiver"
@@ -119,6 +129,26 @@
                 android:resource="@xml/device_admin_policies" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+
+        <receiver 
+            android:name=".receivers.RestartServiceReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.couple_guard_child.ACTION_CHECK_SERVICE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- NotificationRebindReceiver -->
+        <receiver 
+            android:name=".receivers.NotificationRebindReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER" />
             </intent-filter>
         </receiver>
 

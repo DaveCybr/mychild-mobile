@@ -12,6 +12,7 @@ class CameraService {
   static const String _tag = 'CameraService';
   static List<CameraDescription>? _cameras;
   static CameraController? _controller;
+  static String _currentCameraType = 'front';
 
   /// Initialize camera service
   static Future<void> initialize() async {
@@ -26,6 +27,7 @@ class CameraService {
 
   /// Capture photo and send to server
   static Future<void> captureAndSend({bool useFrontCamera = true}) async {
+    _currentCameraType = useFrontCamera ? 'front' : 'back';
     developer.log('========================================', name: _tag);
     developer.log('📸 CAPTURE PHOTO COMMAND', name: _tag);
     developer.log('Use front camera: $useFrontCamera', name: _tag);
@@ -107,75 +109,40 @@ class CameraService {
   }
 
   /// Send captured image to server
+
   static Future<void> _sendToServer(XFile image) async {
     try {
-      developer.log('Preparing to send image to server...', name: _tag);
-
-      // Get device ID
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null || deviceId.isEmpty) {
         developer.log('❌ No device ID found', name: _tag);
         return;
       }
 
-      developer.log('Device ID: $deviceId', name: _tag);
-
-      // Get API service
       final apiService = ApiService();
       await apiService.init();
 
-      // Create form data
-      developer.log('Creating form data...', name: _tag);
+      // ✅ FIX: Use correct endpoint with camera_type
       FormData formData = FormData.fromMap({
         'device_id': deviceId,
-        'screenshot': await MultipartFile.fromFile(
+        'camera_type': _currentCameraType, // front or back
+        'photo': await MultipartFile.fromFile(
+          // ✅ Changed from 'screenshot'
           image.path,
           filename: 'capture_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       });
 
-      developer.log(
-        'Sending POST to ${ApiEndpoints.sendScreenshot}',
-        name: _tag,
-      );
-
-      // Send to server using correct endpoint
       final response = await apiService.dio.post(
-        ApiEndpoints.sendScreenshot, // ✅ FIXED: Use /device/screenshots
+        ApiEndpoints.sendCapturedPhoto, // ✅ Use correct endpoint
         data: formData,
       );
 
-      developer.log('Response status: ${response.statusCode}', name: _tag);
-      developer.log('Response data: ${response.data}', name: _tag);
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log('✅ Image uploaded successfully', name: _tag);
-
-        // Delete local file after successful upload
-        try {
-          File(image.path).deleteSync();
-          developer.log('✅ Local file deleted', name: _tag);
-        } catch (deleteError) {
-          developer.log(
-            '⚠️ Failed to delete local file',
-            name: _tag,
-            error: deleteError,
-          );
-        }
-      } else {
-        developer.log(
-          '⚠️ Upload failed with status: ${response.statusCode}',
-          name: _tag,
-        );
+        developer.log('✅ Photo uploaded successfully', name: _tag);
+        File(image.path).deleteSync();
       }
     } catch (e, stackTrace) {
-      developer.log(
-        '❌ Failed to send image to server',
-        name: _tag,
-        error: e,
-        stackTrace: stackTrace,
-        level: 1000,
-      );
+      developer.log('❌ Failed to send photo', name: _tag, error: e);
     }
   }
 

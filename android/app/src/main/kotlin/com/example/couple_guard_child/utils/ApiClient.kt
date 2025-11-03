@@ -164,6 +164,44 @@ object ApiClient {
         }
     }
 
+    fun updateDeviceStatus(context: Context, isOnline: Boolean): Boolean {
+        return try {
+            val deviceId = getDeviceId(context)
+            if (deviceId.isNullOrEmpty()) {
+                Log.e(TAG, "❌ No device ID")
+                return false
+            }
+
+            val json = JSONObject().apply {
+                put("is_online", isOnline)
+            }
+
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url("$BASE_URL/device/$deviceId/status")
+                .put(body)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val success = response.isSuccessful
+            response.close()
+
+            if (success) {
+                Log.d(TAG, "✅ Device status updated: $isOnline")
+            } else {
+                Log.e(TAG, "❌ Failed to update status: ${response.code}")
+            }
+
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Exception updating status", e)
+            false
+        }
+    }
+
     /**
      * Send Notification to Server
      */

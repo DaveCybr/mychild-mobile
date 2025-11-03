@@ -290,16 +290,69 @@ class MyNotificationListenerService : NotificationListenerService() {
         }
     }
 
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.w(TAG, "========================================")
+        Log.w(TAG, "⚠️ LISTENER DISCONNECTED")
+        Log.w(TAG, "Attempting auto-reconnect...")
+        Log.w(TAG, "========================================")
+        
+        // ✨ Method 1: Request rebind (Android N+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                requestRebind(android.content.ComponentName(this, javaClass))
+                Log.d(TAG, "✅ Rebind requested via API")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to request rebind", e)
+            }
+        }
+        
+        // ✨ Method 2: Schedule delayed restart
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                Log.d(TAG, "Attempting manual reconnect...")
+                
+                // Restart service
+                val intent = Intent(this, MyNotificationListenerService::class.java)
+                startService(intent)
+                
+                Log.d(TAG, "✅ Manual reconnect attempted")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed manual reconnect", e)
+            }
+        }, 5000) // Wait 5 seconds
+        
+        // ✨ Method 3: Broadcast ke RestartServiceReceiver
+        try {
+            val broadcastIntent = Intent(
+                "com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER"
+            )
+            broadcastIntent.setPackage(packageName)
+            sendBroadcast(broadcastIntent)
+            
+            Log.d(TAG, "✅ Rebind broadcast sent")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to send rebind broadcast", e)
+        }
+    }
+
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.w(TAG, "========================================")
         Log.w(TAG, "⚠️ TASK REMOVED - App swiped from recent")
-        Log.w(TAG, "Service will continue running...")
-        Log.w(TAG, "Executor active: ${executor.activeCount} threads")
-        Log.w(TAG, "Executor queued: ${executor.queue.size} tasks")
+        Log.w(TAG, "Service will auto-reconnect...")
         Log.w(TAG, "========================================")
         
-        requestRebind(android.content.ComponentName(this, javaClass))
+        // ✨ Request rebind saat task removed
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                requestRebind(android.content.ComponentName(this, javaClass))
+                Log.d(TAG, "✅ Rebind requested after task removed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to rebind", e)
+            }
+        }
     }
 
     override fun onDestroy() {

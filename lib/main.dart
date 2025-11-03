@@ -7,25 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'core/themes/app_theme.dart';
 import 'services/background/background_service_manager.dart';
+import 'services/background/screen_capture_service.dart';
+import 'services/fcm/fcm_service.dart';
 import 'services/local/local_storage_service.dart';
 import 'screens/splash/splash_screen.dart';
 import 'dart:developer' as developer;
 
 /// ✅ FIX: Simplified background handler tanpa dependency GetIt
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // ✅ Initialize Firebase saja
-  await Firebase.initializeApp();
-
-  developer.log('========================================', name: 'FCM');
-  developer.log('📨 Background FCM Message (Flutter)', name: 'FCM');
-  developer.log('Message ID: ${message.messageId}', name: 'FCM');
-  developer.log('Data: ${message.data}', name: 'FCM');
-  developer.log('========================================', name: 'FCM');
-
-  // ✅ Native Android akan handle actual work
-  // Kita hanya log saja di sini untuk debugging
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +32,7 @@ void main() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     developer.log('✅ FCM background handler registered', name: 'MAIN');
 
+    await ScreenCaptureService.initialize();
     // Step 3: Initialize local storage
     developer.log('Initializing local storage...', name: 'MAIN');
     await LocalStorageService.init();

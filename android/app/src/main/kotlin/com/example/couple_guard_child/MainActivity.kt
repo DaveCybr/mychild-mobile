@@ -74,6 +74,21 @@ class MainActivity: FlutterActivity() {
                     val isIgnoring = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(applicationContext)
                     result.success(isIgnoring)
                 }
+                "sendHeartbeat" -> {
+                    Log.d(TAG, "💓 Sending heartbeat to server")
+                    try {
+                        // Send heartbeat via ApiClient
+                        val success = com.example.couple_guard_child.utils.ApiClient.updateDeviceStatus(
+                            applicationContext,
+                            true
+                        )
+                        result.success(success)
+                        Log.d(TAG, if (success) "✅ Heartbeat sent" else "⚠️ Heartbeat failed")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send heartbeat", e)
+                        result.error("HEARTBEAT_ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

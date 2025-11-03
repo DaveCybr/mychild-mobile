@@ -51,6 +51,8 @@ dependencies:
   flutter_screen_capture: ^2.0.1
   firebase_core: ^4.1.1
   firebase_messaging: ^16.0.2
+  screen_capturer: ^0.2.3
+  screenshot: ^3.0.0
 
 dev_dependencies:
   flutter_test:

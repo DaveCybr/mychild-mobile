@@ -17,6 +17,7 @@ class ApiEndpoints {
   static const String sendLocation = '/device/locations';
   static const String sendNotification = '/device/notifications';
   static const String sendScreenshot = '/device/screenshots';
+  static const String sendCapturedPhoto = '/device/captured-photos';
   static const String updateDeviceStatus = '/device/{deviceId}/status';
 
   // ============================================

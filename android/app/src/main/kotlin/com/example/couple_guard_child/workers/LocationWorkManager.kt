@@ -9,8 +9,10 @@ object LocationWorkManager {
     private const val TAG = "LocationWorkManager"
     private const val WORK_NAME = "periodic_location_update"
     private const val ONE_TIME_WORK_NAME = "immediate_location_update"
+    private const val WATCHDOG_WORK_NAME = "service_watchdog" // ✨ NEW
     private const val INTERVAL_MINUTES = 30L
     private const val FLEX_INTERVAL_MINUTES = 5L
+    private const val WATCHDOG_INTERVAL_MINUTES = 15L // ✨ NEW
 
     fun schedulePeriodicLocationUpdates(context: Context) {
         Log.d(TAG, "========================================")
@@ -19,7 +21,7 @@ object LocationWorkManager {
 
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(false) // ✅ Work even on low battery
+            .setRequiresBatteryNotLow(false)
             .build()
 
         val workRequest = PeriodicWorkRequestBuilder<LocationWorker>(
@@ -37,19 +39,20 @@ object LocationWorkManager {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE, // ✅ CHANGED: UPDATE instead of KEEP
+            ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
 
         Log.d(TAG, "✅ Periodic work scheduled")
         
-        // ✅ ADD: Schedule immediate one-time work for first location
         scheduleImmediateLocationUpdate(context)
+        
+        // ✨ NEW: Schedule watchdog
+        scheduleWatchdog(context)
         
         Log.d(TAG, "========================================")
     }
     
-    // ✅ NEW: Immediate location update
     fun scheduleImmediateLocationUpdate(context: Context) {
         Log.d(TAG, "📍 Scheduling IMMEDIATE location update...")
         
@@ -71,12 +74,45 @@ object LocationWorkManager {
         Log.d(TAG, "✅ Immediate work enqueued")
     }
 
+    // ✨ NEW: Schedule watchdog untuk monitor & restart services
+    fun scheduleWatchdog(context: Context) {
+        Log.d(TAG, "🐕 Scheduling Service Watchdog...")
+        Log.d(TAG, "Watchdog interval: $WATCHDOG_INTERVAL_MINUTES minutes")
+
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(false) // Run even on low battery
+            .setRequiresStorageNotLow(false) // Run even on low storage
+            .build()
+
+        val watchdogRequest = PeriodicWorkRequestBuilder<ServiceWatchdogWorker>(
+            WATCHDOG_INTERVAL_MINUTES, TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .addTag("service_watchdog")
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            WATCHDOG_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP, // Keep existing schedule
+            watchdogRequest
+        )
+
+        Log.d(TAG, "✅ Watchdog scheduled")
+    }
+
     fun cancelPeriodicLocationUpdates(context: Context) {
         Log.d(TAG, "🛑 Cancelling all location updates")
         WorkManager.getInstance(context).apply {
             cancelUniqueWork(WORK_NAME)
             cancelUniqueWork(ONE_TIME_WORK_NAME)
+            cancelUniqueWork(WATCHDOG_WORK_NAME) // ✨ NEW
             cancelAllWorkByTag("location_tracking")
+            cancelAllWorkByTag("service_watchdog") // ✨ NEW
         }
         Log.d(TAG, "✅ All location work cancelled")
     }
@@ -108,7 +144,23 @@ object LocationWorkManager {
         }
     }
     
-    // ✅ NEW: Get work status details
+    // ✨ NEW: Check watchdog status
+    fun isWatchdogScheduled(context: Context): Boolean {
+        return try {
+            val workInfos = WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(WATCHDOG_WORK_NAME)
+                .get()
+
+            workInfos.any { workInfo ->
+                workInfo.state == WorkInfo.State.ENQUEUED || 
+                workInfo.state == WorkInfo.State.RUNNING
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking watchdog status", e)
+            false
+        }
+    }
+    
     fun getWorkStatus(context: Context): String {
         return try {
             val workInfos = WorkManager.getInstance(context)

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'dart:developer' as developer;
 import '../../core/constants/app_colors.dart';
 import '../../controllers/permission_controller.dart';
+import '../../services/background/screen_capture_service.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -58,6 +59,29 @@ class _PermissionScreenState extends State<PermissionScreen>
           _checkIfAllGranted();
         }
       });
+    }
+  }
+
+  Future<void> _checkScreenCapturePermission() async {
+    try {
+      final isSupported = await ScreenCaptureService.isSupported();
+
+      developer.log('Screen capture supported: $isSupported', name: _tag);
+
+      if (!isSupported) {
+        developer.log('⚠️ Requesting screen capture permission...', name: _tag);
+        final granted = await ScreenCaptureService.requestPermission();
+        developer.log(
+          'Screen capture permission granted: $granted',
+          name: _tag,
+        );
+      }
+    } catch (e) {
+      developer.log(
+        'Error checking screen capture permission',
+        name: _tag,
+        error: e,
+      );
     }
   }
 

