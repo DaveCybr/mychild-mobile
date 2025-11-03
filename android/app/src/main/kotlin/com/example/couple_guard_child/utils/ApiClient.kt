@@ -8,6 +8,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.io.File
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 
 object ApiClient {
     private const val TAG = "ApiClient"

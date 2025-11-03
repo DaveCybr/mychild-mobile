@@ -63,16 +63,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.d(TAG, "========================================")
     }
 
-    override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        Log.w(TAG, "========================================")
-        Log.w(TAG, "⚠️ LISTENER DISCONNECTED")
-        Log.w(TAG, "Attempting to reconnect...")
-        Log.w(TAG, "========================================")
-        
-        requestRebind(android.content.ComponentName(this, javaClass))
-    }
-
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val notificationId = "${sbn.packageName}-${sbn.postTime}"
         

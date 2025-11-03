@@ -8,6 +8,7 @@ import android.util.Log
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.ApiClient
 import com.example.couple_guard_child.services.ServiceKeepAliveManager
+import com.example.couple_guard_child.NetworkStateReceiver
 
 /**
  * RestartServiceReceiver
@@ -103,46 +104,6 @@ class RestartServiceReceiver : BroadcastReceiver() {
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to restart WorkManager", e)
-        }
-    }
-}
-
-// ===============================================
-// ALSO ADD: NetworkStateReceiver (for offline retry)
-// ===============================================
-
-class NetworkStateReceiver : BroadcastReceiver() {
-    companion object {
-        private const val TAG = "NetworkStateReceiver"
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != "android.net.conn.CONNECTIVITY_CHANGE") {
-            return
-        }
-
-        val connectivityManager = context.getSystemService(
-            Context.CONNECTIVITY_SERVICE
-        ) as android.net.ConnectivityManager
-        
-        val activeNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            connectivityManager.activeNetwork
-        } else {
-            @Suppress("DEPRECATION")
-            connectivityManager.activeNetworkInfo
-        }
-        
-        val isConnected = activeNetwork != null
-        
-        Log.d(TAG, "Network state changed: ${if (isConnected) "CONNECTED" else "DISCONNECTED"}")
-        
-        // Trigger immediate location update if network is back
-        if (isConnected) {
-            val isPaired = ApiClient.isPaired(context)
-            if (isPaired) {
-                Log.d(TAG, "📡 Network restored - Triggering location update")
-                LocationWorkManager.scheduleImmediateLocationUpdate(context)
-            }
         }
     }
 }

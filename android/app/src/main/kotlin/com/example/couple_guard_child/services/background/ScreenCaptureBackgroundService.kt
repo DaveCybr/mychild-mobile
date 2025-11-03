@@ -25,6 +25,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
+
 class ScreenCaptureBackgroundService : Service() {
     companion object {
         private const val TAG = "ScreenCaptureService"
