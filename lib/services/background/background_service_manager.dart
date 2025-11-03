@@ -33,6 +33,7 @@ class BackgroundServiceManager {
           AndroidForegroundType.location,
           AndroidForegroundType.dataSync,
         ],
+        autoStartOnBoot: true,
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
