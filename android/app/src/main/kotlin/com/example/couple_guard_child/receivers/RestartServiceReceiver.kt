@@ -1,3 +1,5 @@
+package com.example.couple_guard_child.receivers
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent

