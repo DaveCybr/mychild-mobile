@@ -1,6 +1,7 @@
 package com.example.couple_guard_child.services.background
 
 import android.content.Intent
+import android.os.Build // ✅ ADD THIS IMPORT
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -18,15 +19,13 @@ class MyNotificationListenerService : NotificationListenerService() {
         var methodChannel: MethodChannel? = null
     }
 
-    // ✅ FIX 1: Gunakan CoroutineScope untuk better lifecycle management
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
-    // ✅ FIX 2: Keep executor tapi dengan proper configuration
     private val executor = Executors.newFixedThreadPool(
         3,
         { runnable ->
             Thread(runnable).apply {
-                isDaemon = false // Don't let threads die prematurely
+                isDaemon = false
                 priority = Thread.NORM_PRIORITY
                 name = "NotifSender-${System.currentTimeMillis()}"
             }
@@ -41,7 +40,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.d(TAG, "Thread: ${Thread.currentThread().name}")
         Log.d(TAG, "========================================")
         
-        // ✅ FIX 3: Configure executor
         executor.apply {
             setKeepAliveTime(60, TimeUnit.SECONDS)
             allowCoreThreadTimeOut(false)
@@ -75,7 +73,6 @@ class MyNotificationListenerService : NotificationListenerService() {
             val packageName = sbn.packageName
             Log.d(TAG, "Package: $packageName")
             
-            // ✅ FIX 4: Check pairing FIRST
             if (!ApiClient.isPaired(applicationContext)) {
                 Log.w(TAG, "⚠️ Device not paired, skipping")
                 Log.d(TAG, "----------------------------------------")
@@ -91,7 +88,6 @@ class MyNotificationListenerService : NotificationListenerService() {
             Log.d(TAG, "Title: $title")
             Log.d(TAG, "Text: ${text.take(50)}${if (text.length > 50) "..." else ""}")
 
-            // Skip empty notifications
             if (title.isBlank() && text.isBlank()) {
                 Log.w(TAG, "⏭️ SKIPPED: Empty title AND content")
                 Log.d(TAG, "----------------------------------------")
@@ -101,15 +97,12 @@ class MyNotificationListenerService : NotificationListenerService() {
             val finalTitle = if (title.isBlank()) packageName else title
             val finalContent = if (text.isBlank()) "New notification" else text
 
-            // ✅ FIX 5: Check network before sending
             if (!isNetworkAvailable()) {
                 Log.w(TAG, "⚠️ NO NETWORK - Notification will be queued")
-                // TODO: Queue notification for later
                 Log.d(TAG, "----------------------------------------")
                 return
             }
 
-            // ✅ FIX 6: Send with better error handling
             Log.d(TAG, "📤 Queuing notification to executor...")
             Log.d(TAG, "Executor queue size BEFORE: ${executor.queue.size}")
             Log.d(TAG, "Executor active threads: ${executor.activeCount}")
@@ -125,7 +118,6 @@ class MyNotificationListenerService : NotificationListenerService() {
             
             Log.d(TAG, "Executor queue size AFTER: ${executor.queue.size}")
             
-            // Send to Flutter UI (non-blocking)
             sendToFlutter(packageName, finalTitle, finalContent, sbn.postTime)
 
         } catch (e: Exception) {
@@ -142,7 +134,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         title: String, 
         content: String
     ) {
-        // ✅ FIX 7: Better logging and error tracking
         val startTime = System.currentTimeMillis()
         val threadName = Thread.currentThread().name
         
@@ -155,13 +146,11 @@ class MyNotificationListenerService : NotificationListenerService() {
             Log.d(TAG, "  - Queue size: ${executor.queue.size}")
             Log.d(TAG, "  - Completed tasks: ${executor.completedTaskCount}")
             
-            // ✅ FIX 8: Check network again before sending
             if (!isNetworkAvailable()) {
                 Log.e(TAG, "❌ NETWORK LOST during send")
                 return
             }
             
-            // ✅ FIX 9: Check if device is still paired
             if (!ApiClient.isPaired(applicationContext)) {
                 Log.e(TAG, "❌ Device unpaired during send")
                 return
@@ -243,14 +232,13 @@ class MyNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    // ✅ FIX 10: Add network check
     private fun isNetworkAvailable(): Boolean {
         return try {
             val connectivityManager = getSystemService(
                 android.content.Context.CONNECTIVITY_SERVICE
             ) as android.net.ConnectivityManager
             
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val network = connectivityManager.activeNetwork
                 val capabilities = connectivityManager.getNetworkCapabilities(network)
                 val hasNetwork = capabilities != null
@@ -287,7 +275,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.w(TAG, "Attempting auto-reconnect...")
         Log.w(TAG, "========================================")
         
-        // ✨ Method 1: Request rebind (Android N+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 requestRebind(android.content.ComponentName(this, javaClass))
@@ -297,12 +284,10 @@ class MyNotificationListenerService : NotificationListenerService() {
             }
         }
         
-        // ✨ Method 2: Schedule delayed restart
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 Log.d(TAG, "Attempting manual reconnect...")
                 
-                // Restart service
                 val intent = Intent(this, MyNotificationListenerService::class.java)
                 startService(intent)
                 
@@ -310,9 +295,8 @@ class MyNotificationListenerService : NotificationListenerService() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed manual reconnect", e)
             }
-        }, 5000) // Wait 5 seconds
+        }, 5000)
         
-        // ✨ Method 3: Broadcast ke RestartServiceReceiver
         try {
             val broadcastIntent = Intent(
                 "com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER"
@@ -326,7 +310,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         }
     }
 
-
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.w(TAG, "========================================")
@@ -334,7 +317,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.w(TAG, "Service will auto-reconnect...")
         Log.w(TAG, "========================================")
         
-        // ✨ Request rebind saat task removed
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 requestRebind(android.content.ComponentName(this, javaClass))
@@ -354,7 +336,6 @@ class MyNotificationListenerService : NotificationListenerService() {
         Log.w(TAG, "========================================")
         
         try {
-            // ✅ FIX 11: Graceful shutdown
             serviceScope.cancel()
             
             executor.shutdown()

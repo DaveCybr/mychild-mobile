@@ -22,6 +22,9 @@ object NotificationQueueManager {
     private val isProcessing = AtomicBoolean(false)
     private var processingJob: Job? = null
     
+    // ✅ ADD: Store context for API calls
+    private var appContext: Context? = null
+    
     data class QueuedNotification(
         val id: String,
         val appName: String,
@@ -30,6 +33,12 @@ object NotificationQueueManager {
         val timestamp: Long,
         var retryCount: Int = 0
     )
+    
+    // ✅ ADD: Initialize with context
+    fun initialize(context: Context) {
+        appContext = context.applicationContext
+        Log.d(TAG, "✅ NotificationQueueManager initialized")
+    }
     
     /**
      * Add notification to queue
@@ -42,7 +51,7 @@ object NotificationQueueManager {
     ) {
         if (queue.size >= MAX_QUEUE_SIZE) {
             Log.w(TAG, "⚠️ Queue full, removing oldest notification")
-            queue.poll() // Remove oldest
+            queue.poll()
         }
         
         val notification = QueuedNotification(
@@ -52,7 +61,6 @@ object NotificationQueueManager {
         queue.offer(notification)
         Log.d(TAG, "➕ Notification queued. Queue size: ${queue.size}")
         
-        // Start processing if not already running
         startProcessing()
     }
     
@@ -73,29 +81,37 @@ object NotificationQueueManager {
     private suspend fun processQueue() {
         Log.d(TAG, "🔄 Starting queue processing...")
         
+        val context = appContext
+        if (context == null) {
+            Log.e(TAG, "❌ Context not initialized")
+            isProcessing.set(false)
+            return
+        }
+        
         while (queue.isNotEmpty()) {
             val notification = queue.peek() ?: break
             
             try {
                 Log.d(TAG, "📤 Sending queued notification (attempt ${notification.retryCount + 1})")
                 
-                // Try to send
+                // ✅ FIX: Use correct parameters
                 val success = withContext(Dispatchers.IO) {
                     ApiClient.sendNotification(
-                        // Need context here - will fix in implementation
-                        // For now, just return false
-                        false
+                        context,              // ✅ ADD: context parameter
+                        notification.appName, // ✅ CORRECT ORDER
+                        notification.title,
+                        notification.content
                     )
                 }
                 
                 if (success) {
-                    queue.poll() // Remove from queue
+                    queue.poll()
                     Log.d(TAG, "✅ Queued notification sent. Remaining: ${queue.size}")
                 } else {
                     notification.retryCount++
                     
                     if (notification.retryCount >= 3) {
-                        queue.poll() // Remove after 3 failed attempts
+                        queue.poll()
                         Log.e(TAG, "❌ Notification failed after 3 attempts, discarding")
                     } else {
                         Log.w(TAG, "⚠️ Notification send failed, will retry")
@@ -146,14 +162,19 @@ class MyNotificationListenerServiceV2 : NotificationListenerService() {
     
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
+    override fun onCreate() {
+        super.onCreate()
+        // ✅ Initialize queue manager with context
+        NotificationQueueManager.initialize(applicationContext)
+    }
+    
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val notificationId = "${sbn.packageName}-${sbn.postTime}"
         
         Log.d(TAG, "📱 NEW NOTIFICATION: $notificationId")
         
         try {
-            // Check pairing
-            if (!com.example.couple_guard_child.utils.ApiClient.isPaired(applicationContext)) {
+            if (!ApiClient.isPaired(applicationContext)) {
                 Log.w(TAG, "⚠️ Device not paired, skipping")
                 return
             }
@@ -173,10 +194,9 @@ class MyNotificationListenerServiceV2 : NotificationListenerService() {
             val finalTitle = if (title.isBlank()) packageName else title
             val finalContent = if (text.isBlank()) "New notification" else text
             
-            // ✅ Try immediate send
             serviceScope.launch {
                 try {
-                    val success = com.example.couple_guard_child.utils.ApiClient.sendNotification(
+                    val success = ApiClient.sendNotification(
                         applicationContext,
                         packageName,
                         finalTitle,
@@ -184,7 +204,6 @@ class MyNotificationListenerServiceV2 : NotificationListenerService() {
                     )
                     
                     if (!success) {
-                        // ✅ Add to queue if failed
                         Log.w(TAG, "⚠️ Immediate send failed, adding to queue")
                         NotificationQueueManager.enqueue(
                             notificationId,

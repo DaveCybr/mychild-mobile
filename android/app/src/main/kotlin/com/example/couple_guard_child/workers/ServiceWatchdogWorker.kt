@@ -31,7 +31,6 @@ class ServiceWatchdogWorker(
         Log.d(TAG, "🐕 WATCHDOG CHECK - $currentTime")
         Log.d(TAG, "========================================")
 
-        // Check if device is paired
         val isPaired = ApiClient.isPaired(applicationContext)
         val deviceId = ApiClient.getDeviceId(applicationContext)
         
@@ -43,16 +42,9 @@ class ServiceWatchdogWorker(
             return Result.success()
         }
 
-        // STEP 1: Check Location WorkManager
         checkAndFixLocationWork()
-
-        // STEP 2: Check Foreground Service
         checkAndFixForegroundService()
-
-        // STEP 3: Check Notification Listener
         checkAndFixNotificationListener()
-
-        // STEP 4: Send heartbeat to server
         sendHeartbeat()
 
         Log.d(TAG, "========================================")
@@ -78,7 +70,6 @@ class ServiceWatchdogWorker(
             try {
                 LocationWorkManager.schedulePeriodicLocationUpdates(applicationContext)
                 
-                // Verify after scheduling
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     val verified = LocationWorkManager.isWorkScheduled(applicationContext)
                     Log.d(TAG, "Location work re-scheduled: $verified")
@@ -99,6 +90,7 @@ class ServiceWatchdogWorker(
     private fun checkAndFixForegroundService() {
         Log.d(TAG, "Checking Foreground Service...")
 
+        // ✅ FIX: Use correct package name for flutter service
         val isRunning = isServiceRunning(
             applicationContext,
             "id.flutter.flutter_background_service.BackgroundService"
@@ -110,10 +102,9 @@ class ServiceWatchdogWorker(
             Log.w(TAG, "⚠️ Foreground service NOT running! Restarting...")
             
             try {
-                val intent = Intent(
-                    applicationContext,
-                    id.flutter.flutter_background_service.BackgroundService::class.java
-                )
+                // ✅ FIX: Create intent using Class.forName to avoid compile error
+                val serviceClass = Class.forName("id.flutter.flutter_background_service.BackgroundService")
+                val intent = Intent(applicationContext, serviceClass)
                 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     applicationContext.startForegroundService(intent)
@@ -122,6 +113,8 @@ class ServiceWatchdogWorker(
                 }
                 
                 Log.d(TAG, "✅ Foreground service restarted")
+            } catch (e: ClassNotFoundException) {
+                Log.e(TAG, "❌ BackgroundService class not found", e)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to restart foreground service", e)
             }
@@ -143,7 +136,6 @@ class ServiceWatchdogWorker(
         if (!isEnabled) {
             Log.w(TAG, "⚠️ Notification listener NOT enabled (user needs to enable)")
         } else {
-            // Check if listener is actually running
             val isRunning = isServiceRunning(
                 applicationContext,
                 "com.example.couple_guard_child.services.background.MyNotificationListenerService"
@@ -155,7 +147,6 @@ class ServiceWatchdogWorker(
                 Log.w(TAG, "⚠️ Notification listener enabled but not running! Requesting rebind...")
                 
                 try {
-                    // Request rebind via broadcast
                     val intent = Intent(
                         "com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER"
                     )
@@ -181,7 +172,6 @@ class ServiceWatchdogWorker(
             
             val deviceId = ApiClient.getDeviceId(applicationContext) ?: return
             
-            // Update device status as online
             val success = ApiClient.updateDeviceStatus(applicationContext, true)
             
             if (success) {

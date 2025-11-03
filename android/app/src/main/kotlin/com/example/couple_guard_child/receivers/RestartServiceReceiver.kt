@@ -8,7 +8,6 @@ import android.util.Log
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.ApiClient
 import com.example.couple_guard_child.services.ServiceKeepAliveManager
-import com.example.couple_guard_child.NetworkStateReceiver
 
 /**
  * RestartServiceReceiver

