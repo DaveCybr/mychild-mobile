@@ -37,15 +37,6 @@ class NotificationService {
 
       _channel.setMethodCallHandler(_handleNotificationFromNative);
       developer.log('✅ Method call handler registered', name: _tag);
-      // if (isolateId == 1) {
-      //   // Main isolate ID
-      // } else {
-      //   developer.log(
-      //     '⚠️ Notification service hanya support di main isolate',
-      //     name: _tag,
-      //   );
-      //   return;
-      // }
 
       _isListening = true;
       developer.log('✅ Notification listener ACTIVE', name: _tag);

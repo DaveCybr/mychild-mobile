@@ -118,22 +118,20 @@ class CameraService {
         return;
       }
 
-      final apiService = ApiService();
-      await apiService.init();
+      // ✅ FIX: Properly initialize ApiService
+      final apiService = Get.find<ApiService>(); // Use existing instance
 
-      // ✅ FIX: Use correct endpoint with camera_type
       FormData formData = FormData.fromMap({
         'device_id': deviceId,
-        'camera_type': _currentCameraType, // front or back
+        'camera_type': _currentCameraType,
         'photo': await MultipartFile.fromFile(
-          // ✅ Changed from 'screenshot'
           image.path,
           filename: 'capture_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       });
 
       final response = await apiService.dio.post(
-        ApiEndpoints.sendCapturedPhoto, // ✅ Use correct endpoint
+        ApiEndpoints.sendCapturedPhoto,
         data: formData,
       );
 
@@ -141,7 +139,7 @@ class CameraService {
         developer.log('✅ Photo uploaded successfully', name: _tag);
         File(image.path).deleteSync();
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       developer.log('❌ Failed to send photo', name: _tag, error: e);
     }
   }

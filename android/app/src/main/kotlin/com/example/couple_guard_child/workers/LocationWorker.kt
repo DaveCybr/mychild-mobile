@@ -72,13 +72,19 @@ class LocationWorker(
             Log.d(TAG, "   Age: ${(System.currentTimeMillis() - location.time) / 1000}s")
 
             // Get battery level
-            val batteryManager = applicationContext.getSystemService(
-                Context.BATTERY_SERVICE
-            ) as android.os.BatteryManager
-            val batteryLevel = batteryManager.getIntProperty(
-                android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY
-            )
-            
+            val batteryLevel = try {
+                val batteryManager = applicationContext.getSystemService(
+                    Context.BATTERY_SERVICE
+                ) as? android.os.BatteryManager
+                
+                batteryManager?.getIntProperty(
+                    android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY
+                ) ?: 0
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get battery level", e)
+                0
+            }
+
             Log.d(TAG, "🔋 Battery level: $batteryLevel%")
 
             // Send to server with retry

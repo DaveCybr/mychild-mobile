@@ -230,18 +230,26 @@ class CameraBackgroundService : Service() {
             Log.d(TAG, "Image size: ${file.length() / 1024} KB")
 
             // Send to server via ApiClient
+            // Replace TODO section with:
             Thread {
                 try {
-                    // TODO: Call ApiClient to upload
-                    // ApiClient.uploadCapturedPhoto(applicationContext, file)
+                    val success = ApiClient.uploadCapturedPhoto(
+                        applicationContext, 
+                        file,
+                        if (useFrontCamera) "front" else "back"
+                    )
                     
-                    Log.d(TAG, "✅ Image upload initiated")
+                    if (success) {
+                        Log.d(TAG, "✅ Photo uploaded successfully")
+                    } else {
+                        Log.e(TAG, "❌ Failed to upload photo")
+                    }
                     
                     // Delete temp file
                     file.delete()
                     
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to upload image", e)
+                    Log.e(TAG, "Failed to upload photo", e)
                 }
             }.start()
 

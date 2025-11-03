@@ -332,6 +332,129 @@ object ApiClient {
         }
     }
 
+    fun uploadCapturedPhoto(context: Context, file: File, cameraType: String = "front"): Boolean {
+        return try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📸 UPLOADING CAPTURED PHOTO")
+            
+            val deviceId = getDeviceId(context)
+            if (deviceId.isNullOrEmpty()) {
+                Log.e(TAG, "❌ No device ID")
+                return false
+            }
+
+            Log.d(TAG, "Device ID: ${deviceId.substring(0, 8)}...")
+            Log.d(TAG, "Camera Type: $cameraType")
+            Log.d(TAG, "File size: ${file.length() / 1024} KB")
+
+            // Create multipart request body
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("device_id", deviceId)
+                .addFormDataPart("camera_type", cameraType)
+                .addFormDataPart(
+                    "photo",
+                    file.name,
+                    file.asRequestBody("image/jpeg".toMediaType())
+                )
+                .build()
+
+            val request = Request.Builder()
+                .url("$BASE_URL/device/captured-photos")
+                .post(requestBody)
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val startTime = System.currentTimeMillis()
+            val response = client.newCall(request).execute()
+            val duration = System.currentTimeMillis() - startTime
+            
+            val responseBody = response.body?.string()
+
+            Log.d(TAG, "Response Code: ${response.code}")
+            Log.d(TAG, "Response Time: ${duration}ms")
+            Log.d(TAG, "Response Body: $responseBody")
+
+            val success = response.isSuccessful
+            response.close()
+
+            if (success) {
+                Log.d(TAG, "✅ Photo uploaded successfully")
+            } else {
+                Log.e(TAG, "❌ Photo upload failed: ${response.code} - ${response.message}")
+            }
+
+            Log.d(TAG, "========================================")
+            success
+
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.e(TAG, "❌ TIMEOUT: Photo upload took too long", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Exception uploading photo", e)
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun uploadScreenshot(context: Context, file: File): Boolean {
+        return try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "🖥️ UPLOADING SCREENSHOT")
+            
+            val deviceId = getDeviceId(context)
+            if (deviceId.isNullOrEmpty()) {
+                Log.e(TAG, "❌ No device ID")
+                return false
+            }
+
+            Log.d(TAG, "Device ID: ${deviceId.substring(0, 8)}...")
+            Log.d(TAG, "File size: ${file.length() / 1024} KB")
+
+            // Create multipart request body
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("device_id", deviceId)
+                .addFormDataPart(
+                    "screenshot",
+                    file.name,
+                    file.asRequestBody("image/jpeg".toMediaType())
+                )
+                .build()
+
+            val request = Request.Builder()
+                .url("$BASE_URL/device/screenshots")
+                .post(requestBody)
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val startTime = System.currentTimeMillis()
+            val response = client.newCall(request).execute()
+            val duration = System.currentTimeMillis() - startTime
+            
+            val responseBody = response.body?.string()
+
+            Log.d(TAG, "Response Code: ${response.code}")
+            Log.d(TAG, "Response Time: ${duration}ms")
+
+            val success = response.isSuccessful
+            response.close()
+
+            if (success) {
+                Log.d(TAG, "✅ Screenshot uploaded successfully")
+            } else {
+                Log.e(TAG, "❌ Screenshot upload failed: ${response.code}")
+            }
+
+            Log.d(TAG, "========================================")
+            success
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Exception uploading screenshot", e)
+            false
+        }
+    }
+
     /**
      * Update FCM Token
      */

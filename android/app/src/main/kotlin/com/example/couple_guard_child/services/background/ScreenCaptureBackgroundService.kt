@@ -225,9 +225,14 @@ class ScreenCaptureBackgroundService : Service() {
             // Send to server
             Thread {
                 try {
-                    // TODO: Call ApiClient.uploadScreenshot(context, file)
+                    ApiClient.uploadScreenshot(context, file)
                     Log.d(TAG, "✅ Screenshot upload initiated")
                     
+                    if (success) {
+                        Log.d(TAG, "✅ Screenshot uploaded successfully")
+                    } else {
+                        Log.e(TAG, "❌ Failed to upload Screenshot")
+                    }
                     // Delete after upload
                     file.delete()
                     

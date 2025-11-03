@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart' hide FormData, MultipartFile;
 import 'dart:developer' as developer;
 import 'package:screenshot/screenshot.dart';
@@ -13,6 +14,7 @@ class ScreenCaptureService {
   static const String _tag = 'ScreenCaptureService';
   static final ScreenshotController _screenshotController =
       ScreenshotController();
+  static const _platform = MethodChannel('screen_capture_channel');
 
   /// Initialize screenshot controller
   static Future<void> initialize() async {
@@ -35,6 +37,17 @@ class ScreenCaptureService {
   static Future<void> captureAndSend() async {
     developer.log('========================================', name: _tag);
     developer.log('🖥️ SCREEN CAPTURE COMMAND', name: _tag);
+
+    try {
+      developer.log('Requesting native screenshot...', name: _tag);
+
+      // Call native method
+      await _platform.invokeMethod('captureScreen');
+
+      developer.log('✅ Native screenshot requested', name: _tag);
+    } catch (e) {
+      developer.log('Failed to capture via native', name: _tag, error: e);
+    }
 
     try {
       developer.log('Capturing screen...', name: _tag);

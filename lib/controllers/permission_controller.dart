@@ -411,6 +411,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
   }
 
   /// Request all permissions in correct order
+  // lib/controllers/permission_controller.dart
   Future<bool> requestAllPermissions() async {
     developer.log('========================================', name: _tag);
     developer.log('REQUESTING ALL PERMISSIONS', name: _tag);
@@ -425,6 +426,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
     // 2. Background Location (MUST be after foreground)
     if (locationGranted.value) {
+      // ✅ FIX: Actually call the method!
       await requestBackgroundLocationPermission();
       await Future.delayed(const Duration(milliseconds: 1000));
     }

@@ -38,6 +38,46 @@ class MainActivity: FlutterActivity() {
         Log.d(TAG, "========================================")
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                
+                // Background service channel
+                val backgroundChannel = NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID,
+                    NOTIFICATION_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Keeps the app running in background for family safety"
+                    setShowBadge(false)
+                    enableLights(false)
+                    enableVibration(false)
+                    setSound(null, null)
+                }
+                
+                // ✅ ADD: Geofence alert channel
+                val geofenceChannel = NotificationChannel(
+                    "geofence_alerts",
+                    "Geofence Alerts",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Alerts when device leaves geofence area"
+                    enableLights(true)
+                    enableVibration(true)
+                    setShowBadge(true)
+                }
+                
+                notificationManager.createNotificationChannel(backgroundChannel)
+                notificationManager.createNotificationChannel(geofenceChannel)
+                
+                Log.d(TAG, "✅ Notification channels created")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to create notification channels", e)
+            }
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
@@ -89,8 +129,43 @@ class MainActivity: FlutterActivity() {
                         result.error("HEARTBEAT_ERROR", e.message, null)
                     }
                 }
+                "captureScreen" -> {
+                    try {
+                        val bitmap = captureScreenshot()
+                        val file = saveBitmap(bitmap)
+                        Thread {
+                            val success = com.example.couple_guard_child.utils.ApiClient.uploadScreenshot(
+                                applicationContext,
+                                file
+                            )
+                            if (success) {
+                                file.delete()
+                            }
+                        }.start()
+                        
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("CAPTURE_ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
+        }
+
+        private fun captureScreenshot(): Bitmap {
+            val view = window.decorView.rootView
+            view.isDrawingCacheEnabled = true
+            val bitmap = Bitmap.createBitmap(view.drawingCache)
+            view.isDrawingCacheEnabled = false
+            return bitmap
+        }
+        
+        private fun saveBitmap(bitmap: Bitmap): File {
+            val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            return file
         }
         
         // Location worker channel

