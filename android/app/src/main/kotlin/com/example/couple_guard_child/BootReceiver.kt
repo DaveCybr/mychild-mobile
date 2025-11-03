@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.ApiClient
+import com.example.couple_guard_child.services.ServiceKeepAliveManager 
 
 /**
  * BOOT RECEIVER
@@ -88,7 +89,7 @@ class BootReceiver : BroadcastReceiver() {
             LocationWorkManager.schedulePeriodicLocationUpdates(context)
             Log.d(TAG, "✅ Location work scheduled")
             
-            // 3. ✨ NEW: Schedule AlarmManager keep-alive
+            // 3. Schedule AlarmManager keep-alive
             ServiceKeepAliveManager.scheduleServiceCheck(context)
             Log.d(TAG, "✅ Keep-alive alarm scheduled")
             
@@ -106,15 +107,15 @@ class BootReceiver : BroadcastReceiver() {
     private fun verifyStartup(context: Context) {
         try {
             val isScheduled = LocationWorkManager.isWorkScheduled(context)
-            val watchdogScheduled = LocationWorkManager.isWatchdogScheduled(context) // ✨ NEW
-            val alarmScheduled = ServiceKeepAliveManager.isAlarmScheduled(context) // ✨ NEW
+            val watchdogScheduled = LocationWorkManager.isWatchdogScheduled(context)
+            val alarmScheduled = ServiceKeepAliveManager.isAlarmScheduled(context)
             val status = LocationWorkManager.getWorkStatus(context)
             
             Log.d(TAG, "========================================")
             Log.d(TAG, "📊 STARTUP VERIFICATION")
             Log.d(TAG, "Location work scheduled: $isScheduled")
-            Log.d(TAG, "Watchdog scheduled: $watchdogScheduled") // ✨ NEW
-            Log.d(TAG, "AlarmManager scheduled: $alarmScheduled") // ✨ NEW
+            Log.d(TAG, "Watchdog scheduled: $watchdogScheduled")
+            Log.d(TAG, "AlarmManager scheduled: $alarmScheduled")
             Log.d(TAG, "Work status: $status")
             Log.d(TAG, "========================================")
             
