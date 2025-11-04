@@ -1,6 +1,7 @@
 // screens/pairing/pairing_screen.dart
 import 'dart:developer' as developer;
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -88,23 +89,14 @@ class _PairingScreenState extends State<PairingScreen> {
 
       developer.log('✅ Device paired successfully', name: _tag);
 
-      // Step 2: Send FCM token to server if available
-      final hasFcmToken = await FcmHandler.hasToken();
-      developer.log('Has FCM token: $hasFcmToken', name: _tag);
+      final fcmToken = await FirebaseMessaging.instance.getToken();
 
-      if (hasFcmToken) {
-        developer.log('Syncing FCM token with server...', name: _tag);
-        final fcmToken = await LocalStorageService.getFcmToken();
-
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          final deviceService = Get.find<DeviceService>();
-          await deviceService.updateFcmToken(fcmToken);
-          developer.log('✅ FCM token synced with server', name: _tag);
-        } else {
-          developer.log('⚠️ FCM token is empty', name: _tag);
-        }
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        final deviceService = Get.find<DeviceService>();
+        await deviceService.updateFcmToken(fcmToken);
+        developer.log('✅ FCM token synced with server', name: _tag);
       } else {
-        developer.log('⚠️ No FCM token yet, will sync later', name: _tag);
+        developer.log('⚠️ FCM token is empty', name: _tag);
       }
 
       // Step 3: Start WorkManager

