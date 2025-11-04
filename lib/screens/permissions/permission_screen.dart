@@ -34,7 +34,7 @@ class _PermissionScreenState extends State<PermissionScreen>
     _controller = Get.put(PermissionController(), permanent: false);
 
     // Check if already all granted
-    _checkIfAllGranted();
+    // _checkIfAllGranted();
   }
 
   @override
@@ -56,7 +56,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _controller.checkAllPermissions();
-          _checkIfAllGranted();
+          // _checkIfAllGranted();
         }
       });
     }
@@ -112,15 +112,9 @@ class _PermissionScreenState extends State<PermissionScreen>
     developer.log('========================================', name: _tag);
     developer.log('Processing permission index: $index', name: _tag);
 
-    if (index < _controller.permissionTitles.length) {
-      developer.log(
-        'Permission: ${_controller.permissionTitles[index]}',
-        name: _tag,
-      );
-    }
-
     if (index >= _controller.permissionTitles.length) {
-      developer.log('All permissions processed', name: _tag);
+      // ✅ Semua permission granted
+      developer.log('All permissions granted!', name: _tag);
       await LocalStorageService.setPermissionCompleted(true);
 
       if (mounted) {
@@ -132,22 +126,22 @@ class _PermissionScreenState extends State<PermissionScreen>
     bool granted = false;
 
     switch (index) {
-      case 0:
+      case 0: // Location
         granted = await _controller.requestLocationPermission();
         break;
-      case 1:
+      case 1: // Camera
         granted = await _controller.requestCameraPermission();
         break;
-      case 2:
+      case 2: // Notification
         granted = await _controller.requestNotificationPermission();
         break;
-      case 3:
+      case 3: // Storage
         granted = await _controller.requestStoragePermission();
         break;
-      case 4:
+      case 4: // Battery
         granted = await _controller.requestBatteryOptimization();
         break;
-      case 5:
+      case 5: // Screen Capture - ✅ WAJIB
         granted = await _controller.requestScreenCapturePermission();
         break;
       default:
@@ -158,27 +152,30 @@ class _PermissionScreenState extends State<PermissionScreen>
     developer.log('========================================', name: _tag);
 
     if (granted) {
-      // ✅ Move to next permission
+      // ✅ Lanjut ke permission berikutnya
       _controller.currentPermissionIndex.value = index + 1;
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 800));
 
       if (mounted) {
         if (_controller.areAllPermissionsGranted()) {
-          // ✅ All granted, go to dashboard
+          // Semua granted, ke dashboard
           _checkIfAllGranted();
         } else {
-          // ✅ Continue to next permission
+          // Lanjut ke permission berikutnya
           _requestNextPermission();
         }
       }
     } else {
-      // ✅ NOT GRANTED - RETRY SAME PERMISSION
-      developer.log('Permission denied, will retry...', name: _tag);
+      // ❌ TIDAK GRANTED - RETRY permission yang sama
+      developer.log(
+        'Permission denied, retrying same permission...',
+        name: _tag,
+      );
 
       await Future.delayed(const Duration(milliseconds: 1000));
 
       if (mounted) {
-        // ✅ Retry same permission (don't increment index)
+        // ✅ RETRY permission yang sama (tidak increment index)
         _requestNextPermission();
       }
     }
@@ -314,20 +311,21 @@ class _PermissionScreenState extends State<PermissionScreen>
 
               const SizedBox(height: 24),
 
-              // Grant button
               Obx(
                 () => CustomButton(
-                  text: _controller.areAllPermissionsGranted()
+                  text:
+                      _controller
+                          .areAllCriticalPermissionsGranted() // ✅ Critical only
                       ? 'Continue to Dashboard'
                       : 'Grant Permissions',
                   onPressed: () {
-                    if (_controller.areAllPermissionsGranted()) {
+                    if (_controller.areAllCriticalPermissionsGranted()) {
                       _checkIfAllGranted();
                     } else {
                       _requestNextPermission();
                     }
                   },
-                  icon: _controller.areAllPermissionsGranted()
+                  icon: _controller.areAllCriticalPermissionsGranted()
                       ? const Icon(Icons.arrow_forward, color: Colors.white)
                       : const Icon(Icons.lock_open, color: Colors.white),
                 ),

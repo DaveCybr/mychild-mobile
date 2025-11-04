@@ -37,45 +37,24 @@ class ScreenCapturePermissionActivity : Activity() {
 
         fun savePermission(context: Context, resultCode: Int, data: Intent) {
             try {
-                Log.d(TAG, "========================================")
-                Log.d(TAG, "💾 SAVING PERMISSION")
-                Log.d(TAG, "Prefs name: $PREFS_NAME")
-                Log.d(TAG, "Result code: $resultCode")
-                Log.d(TAG, "Data: $data")
-                
-                // 1. Save to SharedPreferences
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val dataUri = data.toUri(0)
                 
-                Log.d(TAG, "Data URI: ${dataUri.substring(0, minOf(100, dataUri.length))}...")
-                
+                // ✅ Use commit() not apply()
                 prefs.edit().apply {
                     putInt(KEY_RESULT_CODE, resultCode)
                     putString(KEY_RESULT_DATA, dataUri)
                     putBoolean(KEY_PERMISSION_GRANTED, true)
-                    apply() // ✅ Use apply() for async
+                    commit() // ← PENTING: sync write
                 }
                 
-                Log.d(TAG, "✅ Saved to SharedPreferences")
-                
-                // 2. Verify save
-                val savedCode = prefs.getInt(KEY_RESULT_CODE, -999)
-                val savedData = prefs.getString(KEY_RESULT_DATA, null)
-                val savedGranted = prefs.getBoolean(KEY_PERMISSION_GRANTED, false)
-                
-                Log.d(TAG, "🔍 VERIFICATION:")
-                Log.d(TAG, "Saved code: $savedCode")
-                Log.d(TAG, "Saved data exists: ${savedData != null}")
-                Log.d(TAG, "Saved granted: $savedGranted")
-                
-                // 3. Save to Service companion object (in-memory)
+                // Save to memory
                 ScreenCaptureBackgroundService.savePermission(resultCode, data)
                 
-                Log.d(TAG, "✅ Permission saved successfully")
-                Log.d(TAG, "========================================")
+                Log.d(TAG, "✅ Permission saved")
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to save permission", e)
-                Log.d(TAG, "========================================")
+                Log.e(TAG, "❌ Save failed", e)
+                throw e
             }
         }
 

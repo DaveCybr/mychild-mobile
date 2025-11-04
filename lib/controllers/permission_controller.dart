@@ -133,10 +133,9 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     update(['permission_list', 'progress']);
   }
 
-  // ✅ ADD: Request screen capture permission
   Future<bool> requestScreenCapturePermission() async {
     developer.log('Requesting screen capture permission...', name: _tag);
-    currentPermissionIndex.value = 6;
+    currentPermissionIndex.value = 5;
     update(['permission_list', 'progress']);
 
     try {
@@ -148,58 +147,65 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
             children: [
               Icon(Icons.screen_share, color: Colors.blue),
               SizedBox(width: 8),
-              Text(
-                'Screen Capture Required',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
+              Text('Screen Capture Required'),
             ],
           ),
           content: const Text(
-            'This allows your parent to capture your screen when needed for safety monitoring.\n\n'
-            'This is REQUIRED for full protection.',
+            'This allows your parent to view your screen when needed.\n\n'
+            'This is REQUIRED and CANNOT be skipped.',
           ),
           actions: [
             ElevatedButton(
               onPressed: () => Get.back(),
-              child: const Text('Allow'),
+              child: const Text('Grant Permission'),
             ),
           ],
         ),
       );
 
       // Request permission
-      developer.log('Granting screen capture permission...', name: _tag);
-
+      developer.log('Requesting screen capture...', name: _tag);
       final granted = await ScreenCaptureService.requestPermission();
 
       screenCaptureGranted.value = granted;
 
       if (granted) {
         developer.log('✅ Screen capture permission granted', name: _tag);
+        return true;
       } else {
         developer.log('❌ Screen capture permission denied', name: _tag);
 
-        // ✅ Inform user it's required
+        // ✅ PAKSA user untuk grant - tidak bisa lanjut
         await Get.dialog(
           barrierDismissible: false,
           AlertDialog(
-            title: const Text('Permission Required'),
+            title: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Permission Required'),
+              ],
+            ),
             content: const Text(
-              'Screen capture permission is required.\n\n'
-              'Please try again.',
+              'Screen capture permission is REQUIRED.\n\n'
+              'You MUST grant this permission to continue.\n\n'
+              'Click "Try Again" to grant permission.',
             ),
             actions: [
               ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () => Get.back(),
-                child: const Text('Try Again'),
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
         );
-      }
 
-      update(['permission_list']);
-      return granted;
+        return false; // ✅ Return false untuk retry
+      }
     } catch (e) {
       developer.log(
         'Error requesting screen capture permission',
@@ -614,18 +620,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     return allGranted;
   }
 
-  bool areAllCriticalPermissionsGranted() {
-    final criticalGranted = Platform.isAndroid
-        ? locationGranted.value &&
-              cameraGranted.value &&
-              notificationGranted.value &&
-              storageGranted.value &&
-              batteryOptimizationDisabled.value
-        : locationGranted.value && cameraGranted.value && storageGranted.value;
-
-    return criticalGranted;
-  }
-
   bool areAllPermissionsGranted() {
     final allGranted = Platform.isAndroid
         ? locationGranted.value &&
@@ -641,5 +635,11 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
               screenCaptureGranted.value; // ✅ WAJIB
 
     return allGranted;
+  }
+
+  // ✅ HAPUS atau ubah areAllCriticalPermissionsGranted()
+  bool areAllCriticalPermissionsGranted() {
+    // Same as areAllPermissionsGranted() - semua wajib
+    return areAllPermissionsGranted();
   }
 }

