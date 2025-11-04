@@ -68,13 +68,6 @@ class PairingController extends GetxController {
         } catch (e) {
           developer.log('Failed to start WorkManager', name: _tag, error: e);
         }
-
-        Get.snackbar(
-          'Success',
-          'Device paired successfully!',
-          snackPosition: SnackPosition.TOP,
-        );
-
         return true;
       } else {
         developer.log(

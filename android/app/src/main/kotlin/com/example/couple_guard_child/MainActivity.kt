@@ -3,7 +3,8 @@ package com.example.couple_guard_child
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.graphics.Bitmap  // ✅ ADD THIS
+import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -14,16 +15,22 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
+import com.example.couple_guard_child.services.ScreenCapturePermissionActivity
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.BatteryOptimizationHelper
-import java.io.File  // ✅ ADD THIS
-import java.io.FileOutputStream  // ✅ ADD THIS
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
     private val LOCATION_CHANNEL = "location_worker_channel"
+    private val SCREEN_CAPTURE_CHANNEL = "screen_capture_permission_channel" // ✅ ADD
     private val TAG = "MainActivity"
     
+    // ✅ ADD: Request code untuk screen capture permission
+    private val REQUEST_SCREEN_CAPTURE_PERMISSION = 9001
+    private var screenCaptureResult: MethodChannel.Result? = null
+
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "child_app_background"
         const val NOTIFICATION_CHANNEL_NAME = "Background Service"
@@ -46,7 +53,6 @@ class MainActivity: FlutterActivity() {
             try {
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 
-                // Background service channel
                 val backgroundChannel = NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
                     NOTIFICATION_CHANNEL_NAME,
@@ -59,7 +65,6 @@ class MainActivity: FlutterActivity() {
                     setSound(null, null)
                 }
                 
-                // Geofence alert channel
                 val geofenceChannel = NotificationChannel(
                     "geofence_alerts",
                     "Geofence Alerts",
@@ -86,7 +91,7 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "Configuring Flutter Engine")
         
-        // Notification listener channel
+        // Existing notification channel...
         val notifChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger, 
             CHANNEL
@@ -131,30 +136,11 @@ class MainActivity: FlutterActivity() {
                         result.error("HEARTBEAT_ERROR", e.message, null)
                     }
                 }
-                "captureScreen" -> {
-                    try {
-                        val bitmap = captureScreenshot()  // ✅ Call function
-                        val file = saveBitmap(bitmap)
-                        Thread {
-                            val success = com.example.couple_guard_child.utils.ApiClient.uploadScreenshot(
-                                applicationContext,
-                                file
-                            )
-                            if (success) {
-                                file.delete()
-                            }
-                        }.start()
-                        
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("CAPTURE_ERROR", e.message, null)
-                    }
-                }
                 else -> result.notImplemented()
             }
         }
         
-        // Location worker channel
+        // Existing location channel...
         val locationChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             LOCATION_CHANNEL
@@ -166,7 +152,6 @@ class MainActivity: FlutterActivity() {
                     Log.d(TAG, "========================================")
                     Log.d(TAG, "📍 START PERIODIC LOCATION REQUEST")
                     
-                    // Check battery optimization
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
                         val isIgnoring = powerManager.isIgnoringBatteryOptimizations(packageName)
@@ -180,7 +165,6 @@ class MainActivity: FlutterActivity() {
                     
                     LocationWorkManager.schedulePeriodicLocationUpdates(applicationContext)
                     
-                    // Verify scheduling
                     Handler(Looper.getMainLooper()).postDelayed({
                         val isScheduled = LocationWorkManager.isWorkScheduled(applicationContext)
                         val status = LocationWorkManager.getWorkStatus(applicationContext)
@@ -211,23 +195,48 @@ class MainActivity: FlutterActivity() {
         }
         
         Log.d(TAG, "✅ Location MethodChannel registered")
-    }
-    
-    // ✅ FIX: Move functions OUTSIDE setMethodCallHandler
-    private fun captureScreenshot(): Bitmap {
-        val view = window.decorView.rootView
-        view.isDrawingCacheEnabled = true
-        val bitmap = Bitmap.createBitmap(view.drawingCache)
-        view.isDrawingCacheEnabled = false
-        return bitmap
-    }
-    
-    private fun saveBitmap(bitmap: Bitmap): File {
-        val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.jpg")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        
+        // ✅ ADD: Screen capture permission channel
+        val screenCaptureChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            SCREEN_CAPTURE_CHANNEL
+        )
+        
+        screenCaptureChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestScreenCapturePermission" -> {
+                    val intent = Intent(this, ScreenCapturePermissionActivity::class.java)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                    result.success(true)
+                }
+                "hasScreenCapturePermission" -> {
+                    val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
+                    result.success(hasPermission)
+                }
+                else -> result.notImplemented()
+            }
         }
-        return file
+        
+        Log.d(TAG, "✅ Screen Capture MethodChannel registered")
+    }
+    
+    // ✅ ADD: Handle result dari ScreenCapturePermissionActivity
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == REQUEST_SCREEN_CAPTURE_PERMISSION) {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📋 SCREEN CAPTURE PERMISSION RESULT")
+            Log.d(TAG, "Result Code: $resultCode")
+            
+            val granted = resultCode == RESULT_OK
+            Log.d(TAG, if (granted) "✅ GRANTED" else "❌ DENIED")
+            Log.d(TAG, "========================================")
+            
+            screenCaptureResult?.success(granted)
+            screenCaptureResult = null
+        }
     }
 
     private fun isNotificationServiceEnabled(): Boolean {

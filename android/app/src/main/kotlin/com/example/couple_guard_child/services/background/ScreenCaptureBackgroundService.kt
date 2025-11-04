@@ -36,9 +36,48 @@ class ScreenCaptureBackgroundService : Service() {
         var mediaProjectionData: Intent? = null
         var hasPermission = false
 
+        fun loadPermissionFromPrefs(context: Context): Boolean {
+            try {
+                val prefs = context.getSharedPreferences("ScreenCapturePrefs", Context.MODE_PRIVATE)
+                val rc = prefs.getInt("screen_capture_result_code", -1)
+                val dataUri = prefs.getString("screen_capture_result_data", null)
+                val granted = prefs.getBoolean("screen_capture_permission_granted", false)
+
+                if (granted && rc != -1 && dataUri != null) {
+                    try {
+                        val intent = Intent.parseUri(dataUri, 0)
+                        mediaProjectionResultCode = rc
+                        mediaProjectionData = intent
+                        hasPermission = true
+                        Log.d(TAG, "✅ Loaded MediaProjection permission from prefs")
+                        return true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Failed to parse saved MediaProjection intent", e)
+                        hasPermission = false
+                        return false
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error loading MediaProjection prefs", e)
+            }
+            hasPermission = false
+            return false
+        }
+
         fun startCapture(context: Context) {
+            // attempt to load permission from prefs if not already in-memory
+            if (!hasPermission) {
+                loadPermissionFromPrefs(context)
+            }
+
+            if (!hasPermission) {
+                Log.e(TAG, "❌ startCapture called but no saved MediaProjection permission")
+                // optionally notify user to open app and grant permission
+                return
+            }
+
             val intent = Intent(context, ScreenCaptureBackgroundService::class.java)
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -69,18 +108,24 @@ class ScreenCaptureBackgroundService : Service() {
         Log.d(TAG, "========================================")
         Log.d(TAG, "🖥️ BACKGROUND SCREENSHOT START")
 
-        startForeground(NOTIFICATION_ID, createNotification("Capturing screen..."))
-
-        if (!hasPermission || mediaProjectionResultCode == null || mediaProjectionData == null) {
-            Log.e(TAG, "❌ No MediaProjection permission!")
-            Log.e(TAG, "User must approve screen capture in app first")
-            stopSelfSafely()
-            return START_NOT_STICKY
+        // Ensure permission loaded (handle cases where static vars lost)
+        if (!hasPermission) {
+            val loaded = loadPermissionFromPrefs(applicationContext)
+            if (!loaded) {
+                Log.e(TAG, "❌ No MediaProjection permission! User must approve screen capture in app first")
+                stopSelfSafely()
+                return START_NOT_STICKY
+            }
         }
 
+        // Only after confirming permission, call startForeground
+        startForeground(NOTIFICATION_ID, createNotification("Capturing screen..."))
+
+        // Proceed with capture
         captureScreen()
         return START_NOT_STICKY
     }
+
 
     private fun captureScreen() {
         try {

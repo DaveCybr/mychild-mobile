@@ -70,15 +70,6 @@ class _SplashScreenState extends State<SplashScreen>
         );
         await LocalStorageService.clearPairing();
 
-        Get.snackbar(
-          'Device Unpaired',
-          'This device has been unpaired. Please pair again.',
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 4),
-        );
-
         Get.offAll(() => const OnboardingScreen());
         return;
       }

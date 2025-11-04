@@ -1,4 +1,4 @@
-package com.example.couple_guard_child.receivers
+package com.example.couple_guard_child
 
 import android.content.BroadcastReceiver
 import android.content.Context

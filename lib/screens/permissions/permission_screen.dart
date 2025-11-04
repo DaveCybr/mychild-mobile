@@ -96,16 +96,6 @@ class _PermissionScreenState extends State<PermissionScreen>
 
       await LocalStorageService.setPermissionCompleted(true);
 
-      Get.snackbar(
-        'Setup Complete!',
-        'All permissions granted successfully',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: AppColors.success,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-        icon: const Icon(Icons.check_circle, color: Colors.white),
-      );
-
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
@@ -114,16 +104,25 @@ class _PermissionScreenState extends State<PermissionScreen>
     }
   }
 
+  // lib/screens/permissions/permission_screen.dart
+
   Future<void> _requestNextPermission() async {
     final index = _controller.currentPermissionIndex.value;
 
+    developer.log('========================================', name: _tag);
+    developer.log('Processing permission index: $index', name: _tag);
+
+    if (index < _controller.permissionTitles.length) {
+      developer.log(
+        'Permission: ${_controller.permissionTitles[index]}',
+        name: _tag,
+      );
+    }
+
     if (index >= _controller.permissionTitles.length) {
       developer.log('All permissions processed', name: _tag);
-
-      // Save completion status
       await LocalStorageService.setPermissionCompleted(true);
 
-      // Go to dashboard
       if (mounted) {
         Get.offAll(() => const DashboardScreen());
       }
@@ -149,25 +148,38 @@ class _PermissionScreenState extends State<PermissionScreen>
         granted = await _controller.requestBatteryOptimization();
         break;
       case 5:
-        granted = true; // Accessibility - skip for now
+        granted = await _controller.requestScreenCapturePermission();
         break;
+      default:
+        granted = true;
     }
 
     developer.log('Permission $index result: $granted', name: _tag);
+    developer.log('========================================', name: _tag);
 
-    // Move to next permission after delay
-    if (granted || index == 5) {
+    if (granted) {
+      // ✅ Move to next permission
       _controller.currentPermissionIndex.value = index + 1;
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
-        // Check if all granted now
         if (_controller.areAllPermissionsGranted()) {
+          // ✅ All granted, go to dashboard
           _checkIfAllGranted();
         } else {
-          // Continue to next permission
+          // ✅ Continue to next permission
           _requestNextPermission();
         }
+      }
+    } else {
+      // ✅ NOT GRANTED - RETRY SAME PERMISSION
+      developer.log('Permission denied, will retry...', name: _tag);
+
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      if (mounted) {
+        // ✅ Retry same permission (don't increment index)
+        _requestNextPermission();
       }
     }
   }
@@ -227,9 +239,9 @@ class _PermissionScreenState extends State<PermissionScreen>
                   id: 'permission_list',
                   builder: (controller) {
                     return ListView.builder(
-                      itemCount:
-                          controller.permissionTitles.length -
-                          1, // Skip accessibility
+                      itemCount: controller
+                          .permissionTitles
+                          .length, // ✅ Was: -1, now include all
                       itemBuilder: (context, index) {
                         final isCurrentOrPast =
                             index <= controller.currentPermissionIndex.value;
@@ -255,10 +267,11 @@ class _PermissionScreenState extends State<PermissionScreen>
               GetBuilder<PermissionController>(
                 id: 'progress',
                 builder: (controller) {
-                  final progress =
-                      (controller.currentPermissionIndex.value + 1) /
-                      (controller.permissionTitles.length -
-                          1); // -1 for accessibility
+                  final totalPermissions = controller.permissionTitles.length;
+                  final completedPermissions =
+                      controller.currentPermissionIndex.value;
+
+                  final progress = completedPermissions / totalPermissions;
 
                   return Column(
                     children: [
@@ -266,7 +279,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '${controller.currentPermissionIndex.value + 1} of ${controller.permissionTitles.length - 1}',
+                            '$completedPermissions of $totalPermissions required', // ✅ All required
                             style: const TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondary,
@@ -286,7 +299,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: progress,
+                          value: progress.clamp(0.0, 1.0),
                           minHeight: 8,
                           backgroundColor: AppColors.grey200,
                           valueColor: const AlwaysStoppedAnimation<Color>(
@@ -338,6 +351,8 @@ class _PermissionScreenState extends State<PermissionScreen>
         return _controller.storageGranted.value;
       case 4:
         return _controller.batteryOptimizationDisabled.value;
+      case 5:
+        return _controller.screenCaptureGranted.value; // ✅ ADD
       default:
         return false;
     }

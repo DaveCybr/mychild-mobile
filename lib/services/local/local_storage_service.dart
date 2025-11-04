@@ -1,4 +1,4 @@
-// lib/services/local/local_storage_service.dart - FIXED VERSION
+// lib/services/local/local_storage_service.dart
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
@@ -6,6 +6,9 @@ import '../../core/constants/app_constants.dart';
 class LocalStorageService {
   static late SharedPreferences _prefs;
   static const _secureStorage = FlutterSecureStorage();
+
+  // Public getter for SharedPreferences
+  static SharedPreferences get prefs => _prefs;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -40,6 +43,17 @@ class LocalStorageService {
   /// Save permission completion status
   static Future<void> setPermissionCompleted(bool completed) async {
     await _prefs.setBool(AppConstants.keyPermissionCompleted, completed);
+  }
+
+  // ✅ ADD: Screen capture permission methods
+  /// Save screen capture permission status
+  static Future<void> setScreenCapturePermission(bool granted) async {
+    await _prefs.setBool('screen_capture_permission_granted', granted);
+  }
+
+  /// Get screen capture permission status
+  static Future<bool> getScreenCapturePermission() async {
+    return _prefs.getBool('screen_capture_permission_granted') ?? false;
   }
 
   // ============================================
@@ -99,6 +113,9 @@ class LocalStorageService {
     await _prefs.setBool(AppConstants.keyIsPaired, false);
     await _prefs.remove(AppConstants.keyPermissionCompleted);
     await _prefs.remove(AppConstants.keyFcmToken);
+    await _prefs.remove(
+      'screen_capture_permission_granted',
+    ); // ✅ ADD: Clear screen capture permission
     await _secureStorage.delete(key: AppConstants.keyAuthToken);
   }
 }

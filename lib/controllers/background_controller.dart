@@ -209,14 +209,6 @@ class BackgroundController extends GetxController {
         );
         developer.log('Notification mirroring: ACTIVE', name: _tag);
         developer.log('========================================', name: _tag);
-
-        // Show success message
-        Get.snackbar(
-          'Monitoring Started',
-          'All services are now active',
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 2),
-        );
       } else {
         throw Exception('Background service failed to start');
       }
@@ -338,69 +330,6 @@ class BackgroundController extends GetxController {
         error: e,
       );
     }
-  }
-
-  /// Handle commands from parent app (via FCM)
-  void handleParentCommand(Map<String, dynamic> command) {
-    final commandType = command['type'] as String?;
-
-    developer.log('========================================', name: _tag);
-    developer.log('PARENT COMMAND RECEIVED', name: _tag);
-    developer.log('Type: $commandType', name: _tag);
-    developer.log('Data: $command', name: _tag);
-
-    if (commandType == null) {
-      developer.log('⚠️ Command type is null, ignoring', name: _tag);
-      return;
-    }
-
-    try {
-      switch (commandType) {
-        case 'CAPTURE_PHOTO':
-          developer.log('📸 Executing photo capture...', name: _tag);
-          final useFront = command['front_camera'] as bool? ?? true;
-          CameraService.captureAndSend(useFrontCamera: useFront);
-          developer.log('✅ Photo capture initiated', name: _tag);
-          break;
-
-        case 'REQUEST_LOCATION':
-          developer.log('📍 Sending immediate location...', name: _tag);
-          LocationService.sendImmediateLocation();
-          developer.log('✅ Location request sent', name: _tag);
-          break;
-
-        case 'START_MONITORING':
-          developer.log('▶️ Starting monitoring services...', name: _tag);
-          if (!servicesRunning.value) {
-            initializeAllServices();
-          } else {
-            developer.log('⏭️ Services already running', name: _tag);
-          }
-          break;
-
-        case 'STOP_MONITORING':
-          developer.log('⏹️ Stopping monitoring services...', name: _tag);
-          stopAllServices();
-          break;
-
-        default:
-          developer.log(
-            '⚠️ Unknown command type: $commandType',
-            name: _tag,
-            level: 900,
-          );
-      }
-    } catch (e, stackTrace) {
-      developer.log(
-        '❌ Error handling parent command',
-        name: _tag,
-        error: e,
-        stackTrace: stackTrace,
-        level: 1000,
-      );
-    }
-
-    developer.log('========================================', name: _tag);
   }
 
   @override

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
+import '../services/background/screen_capture_service.dart';
+
 class PermissionController extends GetxController with WidgetsBindingObserver {
   static const String _tag = 'PermissionController';
 
@@ -14,11 +16,13 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
   final RxBool notificationGranted = false.obs;
   final RxBool storageGranted = false.obs;
   final RxBool batteryOptimizationDisabled = false.obs;
+  final RxBool screenCaptureGranted = false.obs; // ✅ ADD
 
   final RxBool isCheckingPermissions = false.obs;
   final RxInt currentPermissionIndex = 0.obs;
   final RxBool isWaitingForSettings = false.obs;
 
+  // ✅ UPDATE: Add screen capture to list
   final List<String> permissionTitles = [
     'Location Access',
     'Background Location',
@@ -26,8 +30,10 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Notification Access',
     'Storage Access',
     'Battery Optimization',
+    'Screen Capture', // ✅ ADD
   ];
 
+  // ✅ UPDATE: Add description
   final List<String> permissionDescriptions = [
     'Required to track device location for safety',
     'Allows location tracking when app is closed',
@@ -35,6 +41,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Required to mirror notifications',
     'Needed to save monitoring data',
     'Disable to keep app running in background',
+    'Allows parent to capture screen when needed', // ✅ ADD
   ];
 
   @override
@@ -126,7 +133,84 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     update(['permission_list', 'progress']);
   }
 
-  /// CRITICAL FIX: Request foreground location first, then background
+  // ✅ ADD: Request screen capture permission
+  Future<bool> requestScreenCapturePermission() async {
+    developer.log('Requesting screen capture permission...', name: _tag);
+    currentPermissionIndex.value = 6;
+    update(['permission_list', 'progress']);
+
+    try {
+      // ✅ WAJIB - tidak ada tombol Skip
+      await Get.dialog(
+        barrierDismissible: false,
+        AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.screen_share, color: Colors.blue),
+              SizedBox(width: 8),
+              Text(
+                'Screen Capture Required',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ],
+          ),
+          content: const Text(
+            'This allows your parent to capture your screen when needed for safety monitoring.\n\n'
+            'This is REQUIRED for full protection.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Allow'),
+            ),
+          ],
+        ),
+      );
+
+      // Request permission
+      developer.log('Granting screen capture permission...', name: _tag);
+
+      final granted = await ScreenCaptureService.requestPermission();
+
+      screenCaptureGranted.value = granted;
+
+      if (granted) {
+        developer.log('✅ Screen capture permission granted', name: _tag);
+      } else {
+        developer.log('❌ Screen capture permission denied', name: _tag);
+
+        // ✅ Inform user it's required
+        await Get.dialog(
+          barrierDismissible: false,
+          AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text(
+              'Screen capture permission is required.\n\n'
+              'Please try again.',
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Get.back(),
+                child: const Text('Try Again'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      update(['permission_list']);
+      return granted;
+    } catch (e) {
+      developer.log(
+        'Error requesting screen capture permission',
+        name: _tag,
+        error: e,
+      );
+      screenCaptureGranted.value = false;
+      return false;
+    }
+  }
+
   Future<bool> requestLocationPermission() async {
     developer.log('========================================', name: _tag);
     developer.log('REQUESTING LOCATION PERMISSION (Step 1/2)', name: _tag);
@@ -134,7 +218,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     currentPermissionIndex.value = 0;
     update(['permission_list', 'progress']);
 
-    // STEP 1: Request FOREGROUND location first (ACCESS_FINE_LOCATION)
     developer.log('Step 1: Requesting FOREGROUND location...', name: _tag);
 
     PermissionStatus fgStatus = await Permission.location.request();
@@ -146,13 +229,28 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
         name: _tag,
       );
 
-      Get.snackbar(
-        'Permission Required',
-        'Please enable location permission from settings',
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
+      // ✅ WAJIB buka settings
+      await Get.dialog(
+        barrierDismissible: false, // ✅ User tidak bisa close
+        AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Permission Required'),
+            ],
+          ),
+          content: const Text(
+            'Location permission is REQUIRED for this app to work.\n\n'
+            'Please enable it in Settings.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
       );
 
       isWaitingForSettings.value = true;
@@ -162,12 +260,29 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
     if (!fgStatus.isGranted) {
       developer.log('Foreground location DENIED by user', name: _tag);
+
+      // ✅ Tanya lagi sampai granted
+      await Get.dialog(
+        barrierDismissible: false,
+        AlertDialog(
+          title: const Text('Permission Required'),
+          content: const Text(
+            'Location permission is required.\n\nPlease allow location access.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+
       locationGranted.value = false;
       update(['permission_list']);
-      return false;
+      return false; // Will retry
     }
 
-    // Foreground location granted!
     developer.log('✅ Foreground location GRANTED', name: _tag);
     locationGranted.value = true;
     update(['permission_list']);
@@ -176,7 +291,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     return true;
   }
 
-  /// STEP 2: Request background location (called separately)
   Future<bool> requestBackgroundLocationPermission() async {
     developer.log('========================================', name: _tag);
     developer.log('REQUESTING BACKGROUND LOCATION (Step 2/2)', name: _tag);
@@ -184,7 +298,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     currentPermissionIndex.value = 1;
     update(['permission_list', 'progress']);
 
-    // Check if foreground is granted first
     final fgGranted = await Permission.location.isGranted;
     if (!fgGranted) {
       developer.log(
@@ -194,17 +307,17 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       return false;
     }
 
-    // Show explanation dialog first (Android best practice)
+    // ✅ WAJIB - tidak ada tombol Cancel
     await Get.dialog(
+      barrierDismissible: false,
       AlertDialog(
-        title: const Text('Background Location'),
+        title: const Text('Background Location Required'),
         content: const Text(
           'To keep tracking your location when the app is closed, '
-          'please select "Allow all the time" in the next screen.\n\n'
-          'This helps keep you safe even when you\'re not actively using the app.',
+          'you MUST select "Allow all the time" in the next screen.\n\n'
+          'This is REQUIRED for family safety.',
         ),
         actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Get.back(),
             child: const Text('Continue'),
@@ -213,10 +326,8 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       ),
     );
 
-    // Small delay to let dialog close
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // Request background location
     developer.log(
       'Requesting BACKGROUND location (locationAlways)...',
       name: _tag,
@@ -225,34 +336,42 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     PermissionStatus bgStatus = await Permission.locationAlways.request();
     developer.log('Background location result: $bgStatus', name: _tag);
 
-    if (bgStatus.isPermanentlyDenied) {
-      developer.log('Background location permanently denied', name: _tag);
+    if (bgStatus.isPermanentlyDenied || !bgStatus.isGranted) {
+      developer.log('Background location denied', name: _tag);
 
-      Get.snackbar(
-        'Background Location',
-        'For full protection, enable "Allow all the time" in Settings',
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
+      // ✅ WAJIB buka settings
+      await Get.dialog(
+        barrierDismissible: false,
+        AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Permission Required'),
+            ],
+          ),
+          content: const Text(
+            'Background location is REQUIRED.\n\n'
+            'Please select "Allow all the time" in Settings.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
       );
 
-      // Don't block - foreground location is still granted
-      return true;
+      isWaitingForSettings.value = true;
+      await openAppSettings();
+      return false;
     }
 
-    if (bgStatus.isGranted) {
-      developer.log('✅ Background location GRANTED', name: _tag);
-    } else {
-      developer.log(
-        '⚠️ Background location DENIED (but foreground still OK)',
-        name: _tag,
-      );
-    }
-
+    developer.log('✅ Background location GRANTED', name: _tag);
     developer.log('========================================', name: _tag);
     update(['permission_list']);
-    return true; // Return true because foreground is granted
+    return true;
   }
 
   Future<bool> requestCameraPermission() async {
@@ -263,18 +382,35 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     PermissionStatus status = await Permission.camera.request();
     developer.log('Camera permission result: $status', name: _tag);
 
-    if (status.isPermanentlyDenied) {
-      Get.snackbar(
-        'Permission Required',
-        'Please enable camera permission from settings',
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
+    if (status.isPermanentlyDenied || !status.isGranted) {
+      // ✅ WAJIB buka settings
+      await Get.dialog(
+        barrierDismissible: false,
+        AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Permission Required'),
+            ],
+          ),
+          content: const Text(
+            'Camera permission is REQUIRED.\n\n'
+            'Please enable it in Settings.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
       );
 
       isWaitingForSettings.value = true;
       await openAppSettings();
+      cameraGranted.value = false;
+      update(['permission_list']);
       return false;
     }
 
@@ -298,11 +434,13 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
         return true;
       }
 
+      // ✅ WAJIB - tidak ada tombol Cancel
       await Get.dialog(
+        barrierDismissible: false,
         AlertDialog(
-          title: const Text('Notification Access'),
+          title: const Text('Notification Access Required'),
           content: const Text(
-            'This app needs to access notifications to mirror them.\n\n'
+            'This app REQUIRES notification access.\n\n'
             'Steps:\n'
             '1. Tap "Open Settings"\n'
             '2. Find "Family Safety"\n'
@@ -310,10 +448,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
             '4. Return to app',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('Cancel'),
-            ),
             ElevatedButton(
               onPressed: () => Get.back(),
               child: const Text('Open Settings'),
@@ -323,11 +457,11 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       );
 
       isWaitingForSettings.value = true;
-      bool? granted = await NotificationListenerService.requestPermission();
+      await NotificationListenerService.requestPermission();
 
       await Future.delayed(const Duration(milliseconds: 1000));
 
-      granted = await NotificationListenerService.isPermissionGranted();
+      bool? granted = await NotificationListenerService.isPermissionGranted();
       notificationGranted.value = granted ?? false;
       update(['permission_list']);
 
@@ -351,18 +485,35 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       }
     }
 
-    if (status.isPermanentlyDenied) {
-      Get.snackbar(
-        'Permission Required',
-        'Please enable storage permission from settings',
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
+    if (status.isPermanentlyDenied || !status.isGranted) {
+      // ✅ WAJIB buka settings
+      await Get.dialog(
+        barrierDismissible: false,
+        AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Permission Required'),
+            ],
+          ),
+          content: const Text(
+            'Storage permission is REQUIRED.\n\n'
+            'Please enable it in Settings.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
       );
 
       isWaitingForSettings.value = true;
       await openAppSettings();
+      storageGranted.value = false;
+      update(['permission_list']);
       return false;
     }
 
@@ -377,18 +528,16 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     update(['permission_list', 'progress']);
 
     if (Platform.isAndroid) {
+      // ✅ WAJIB - tidak ada tombol Skip
       await Get.dialog(
+        barrierDismissible: false,
         AlertDialog(
-          title: const Text('Battery Optimization'),
+          title: const Text('Battery Optimization Required'),
           content: const Text(
-            'To keep the app running in the background, disable battery optimization.\n\n'
+            'You MUST disable battery optimization to keep the app running.\n\n'
             'Tap "Open Settings" and select "Don\'t optimize".',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('Cancel'),
-            ),
             ElevatedButton(
               onPressed: () => Get.back(),
               child: const Text('Open Settings'),
@@ -410,23 +559,21 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     return true;
   }
 
-  /// Request all permissions in correct order
-  // lib/controllers/permission_controller.dart
+  // ✅ UPDATE: Include screen capture in request flow
   Future<bool> requestAllPermissions() async {
     developer.log('========================================', name: _tag);
     developer.log('REQUESTING ALL PERMISSIONS', name: _tag);
 
     bool allGranted = true;
 
-    // 1. Foreground Location (MUST be first)
+    // 1. Foreground Location
     if (!locationGranted.value) {
       if (!await requestLocationPermission()) allGranted = false;
       await Future.delayed(const Duration(milliseconds: 1000));
     }
 
-    // 2. Background Location (MUST be after foreground)
+    // 2. Background Location
     if (locationGranted.value) {
-      // ✅ FIX: Actually call the method!
       await requestBackgroundLocationPermission();
       await Future.delayed(const Duration(milliseconds: 1000));
     }
@@ -452,6 +599,13 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     // 6. Battery Optimization
     if (!batteryOptimizationDisabled.value) {
       if (!await requestBatteryOptimization()) allGranted = false;
+      await Future.delayed(const Duration(milliseconds: 800));
+    }
+
+    // 7. ✅ ADD: Screen Capture
+    if (!screenCaptureGranted.value) {
+      await requestScreenCapturePermission(); // Optional, don't block
+      await Future.delayed(const Duration(milliseconds: 800));
     }
 
     developer.log('All permissions process completed', name: _tag);
@@ -460,14 +614,31 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     return allGranted;
   }
 
-  bool areAllPermissionsGranted() {
-    final allGranted = Platform.isAndroid
+  bool areAllCriticalPermissionsGranted() {
+    final criticalGranted = Platform.isAndroid
         ? locationGranted.value &&
               cameraGranted.value &&
               notificationGranted.value &&
               storageGranted.value &&
               batteryOptimizationDisabled.value
         : locationGranted.value && cameraGranted.value && storageGranted.value;
+
+    return criticalGranted;
+  }
+
+  bool areAllPermissionsGranted() {
+    final allGranted = Platform.isAndroid
+        ? locationGranted.value &&
+              cameraGranted.value &&
+              notificationGranted.value &&
+              storageGranted.value &&
+              batteryOptimizationDisabled.value &&
+              screenCaptureGranted
+                  .value // ✅ WAJIB
+        : locationGranted.value &&
+              cameraGranted.value &&
+              storageGranted.value &&
+              screenCaptureGranted.value; // ✅ WAJIB
 
     return allGranted;
   }

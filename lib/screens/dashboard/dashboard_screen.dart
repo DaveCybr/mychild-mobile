@@ -48,29 +48,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         _bgController.initializeAllServices();
       }
     });
-
-    // Show setup complete notification
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        Get.snackbar(
-          'Setup Complete',
-          'The app will continue running in the background',
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 3),
-          backgroundColor: AppColors.success.withOpacity(0.9),
-          colorText: AppColors.white,
-          icon: const Icon(Icons.check_circle, color: AppColors.white),
-        );
-      }
-    });
-
-    // Auto-minimize after 5 seconds
-    // Future.delayed(const Duration(seconds: 5), () {
-    //   if (mounted) {
-    //     developer.log('Auto-minimizing app', name: _tag);
-    //     _controller.minimizeApp();
-    //   }
-    // });
   }
 
   @override
@@ -460,15 +437,6 @@ class _DashboardScreenState extends State<DashboardScreen>
               Get.back(); // Close loading
 
               if (success) {
-                Get.snackbar(
-                  'Success',
-                  'Device unpaired successfully',
-                  snackPosition: SnackPosition.TOP,
-                  backgroundColor: Colors.green,
-                  colorText: Colors.white,
-                  duration: const Duration(seconds: 3),
-                );
-
                 // Redirect to onboarding
                 await Future.delayed(const Duration(milliseconds: 500));
                 Get.offAll(() => const OnboardingScreen());

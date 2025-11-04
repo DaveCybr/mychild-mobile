@@ -1,8 +1,13 @@
 // screens/pairing/pairing_screen.dart
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../../core/constants/app_colors.dart';
 import '../../controllers/pairing_controller.dart';
+import '../../services/api/device_service.dart';
+import '../../services/fcm/fcm_service.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -16,6 +21,9 @@ class PairingScreen extends StatefulWidget {
 }
 
 class _PairingScreenState extends State<PairingScreen> {
+  static const String _tag = 'PairingScreen';
+  static const _platform = MethodChannel('location_worker_channel');
+
   final PairingController _controller = Get.put(PairingController());
   final TextEditingController _codeController = TextEditingController();
   final List<TextEditingController> _codeControllers = List.generate(
@@ -30,7 +38,7 @@ class _PairingScreenState extends State<PairingScreen> {
     _checkIfAlreadyPaired();
   }
 
-  // BARU: Cek apakah sudah paired
+  // Cek apakah sudah paired
   Future<void> _checkIfAlreadyPaired() async {
     final isPaired = await LocalStorageService.getIsPaired();
     if (isPaired) {
@@ -66,9 +74,59 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   Future<void> _submitCode(String code) async {
-    final success = await _controller.pairDevice(code);
-    if (success) {
+    developer.log('========================================', name: _tag);
+    developer.log('Starting pairing process with code: $code', name: _tag);
+
+    try {
+      // Step 1: Pair device
+      final success = await _controller.pairDevice(code);
+
+      if (!success) {
+        developer.log('❌ Pairing failed', name: _tag, level: 900);
+        return;
+      }
+
+      developer.log('✅ Device paired successfully', name: _tag);
+
+      // Step 2: Send FCM token to server if available
+      final hasFcmToken = await FcmHandler.hasToken();
+      developer.log('Has FCM token: $hasFcmToken', name: _tag);
+
+      if (hasFcmToken) {
+        developer.log('Syncing FCM token with server...', name: _tag);
+        final fcmToken = await LocalStorageService.getFcmToken();
+
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          final deviceService = Get.find<DeviceService>();
+          await deviceService.updateFcmToken(fcmToken);
+          developer.log('✅ FCM token synced with server', name: _tag);
+        } else {
+          developer.log('⚠️ FCM token is empty', name: _tag);
+        }
+      } else {
+        developer.log('⚠️ No FCM token yet, will sync later', name: _tag);
+      }
+
+      // Step 3: Start WorkManager
+      try {
+        await _platform.invokeMethod('startPeriodicLocation');
+        developer.log('✅ WorkManager scheduled', name: _tag);
+      } catch (e) {
+        developer.log('Failed to start WorkManager', name: _tag, error: e);
+      }
+
+      developer.log('========================================', name: _tag);
+
+      // Step 4: Navigate to permission screen
       Get.off(() => const PermissionScreen());
+    } catch (e) {
+      developer.log(
+        'Error during pairing process',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
+      developer.log('========================================', name: _tag);
     }
   }
 
