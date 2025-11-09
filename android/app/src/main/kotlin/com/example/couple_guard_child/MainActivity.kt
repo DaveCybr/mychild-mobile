@@ -15,8 +15,8 @@ import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.example.couple_guard_child.services.background.ScreenCaptureBackgroundService
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
-import com.example.couple_guard_child.services.ScreenCapturePermissionActivity
 import com.example.couple_guard_child.workers.LocationWorkManager
 import com.example.couple_guard_child.utils.BatteryOptimizationHelper
 import java.io.File
@@ -29,7 +29,7 @@ class MainActivity: FlutterActivity() {
     private val TAG = "MainActivity"
     
     // ✅ ADD: Request code untuk screen capture permission
-    private val REQUEST_CODE_SCREEN_CAPTURE = 9001
+    private val REQUEST_CODE_SCREEN_CAPTURE = 1001
     private var screenCaptureResult: MethodChannel.Result? = null
 
     companion object {
@@ -206,13 +206,20 @@ class MainActivity: FlutterActivity() {
         screenCaptureChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestScreenCapturePermission" -> {
-                    val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
                     requestProjectionPermission()
-                    result.success(hasPermission) 
+                    result.success(true)
                 }
-                "hasScreenCapturePermission" -> {
-                    val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
-                    result.success(hasPermission)
+                "setDeviceId" -> {
+                    val deviceId = (call.argument<String>("deviceId") ?: "")
+                    NativeBridge.setDeviceId(this, deviceId)
+                    result.success(true)
+                }
+                "takeScreenshotNow" -> {
+                    ScreenCaptureBackgroundService.enqueueAction(this, ScreenCaptureBackgroundService.ACTION_TAKE_SCREENSHOT)
+                    result.success(true)
+                }
+                "isProjectionActive" -> {
+                    result.success(ScreenCaptureBackgroundService.isActive())
                 }
                 else -> result.notImplemented()
             }
@@ -226,22 +233,21 @@ class MainActivity: FlutterActivity() {
         val intent = mgr.createScreenCaptureIntent()
         startActivityForResult(intent, REQUEST_CODE_SCREEN_CAPTURE)
     }
-    
-    // ✅ ADD: Handle result dari ScreenCapturePermissionActivity
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        
         if (requestCode == REQUEST_CODE_SCREEN_CAPTURE) {
-            Log.d(TAG, "========================================")
-            Log.d(TAG, "📋 SCREEN CAPTURE PERMISSION RESULT")
-            Log.d(TAG, "Result Code: $resultCode")
-            
-            val granted = resultCode == RESULT_OK
-            Log.d(TAG, if (granted) "✅ GRANTED" else "❌ DENIED")
-            Log.d(TAG, "========================================")
-            
-            screenCaptureResult?.success(granted)
-            screenCaptureResult = null
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                // Start Background service and pass the intent
+                val svcIntent = Intent(this, ScreenCaptureBackgroundService::class.java).apply {
+                    action = ScreenCaptureBackgroundService.ACTION_START
+                    putExtra(ScreenCaptureBackgroundService.EXTRA_RESULT_CODE, resultCode)
+                    putExtra(ScreenCaptureBackgroundService.EXTRA_RESULT_INTENT, data)
+                }
+                startForegroundService(svcIntent)
+            } else {
+                Log.w("MainActivity", "User denied screen capture permission")
+            }
         }
     }
 

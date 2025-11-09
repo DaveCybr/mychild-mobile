@@ -91,12 +91,12 @@
             android:launchMode="singleInstance"
             android:taskAffinity="" />
 
-        <activity
+        <!-- <activity
             android:name=".services.ScreenCapturePermissionActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:taskAffinity="" />
+            android:taskAffinity="" /> -->
 
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"

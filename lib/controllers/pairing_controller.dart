@@ -7,6 +7,9 @@ import 'dart:developer' as developer;
 class PairingController extends GetxController {
   static const String _tag = 'PairingController';
   static const _platform = MethodChannel('location_worker_channel'); // ✅ ADD
+  static const screenshot = MethodChannel(
+    'screen_capture_permission_channel',
+  ); // ✅ ADD
 
   DeviceService get _deviceService => Get.find<DeviceService>();
 
@@ -61,6 +64,13 @@ class PairingController extends GetxController {
         );
         developer.log('Device info saved to local storage', name: _tag);
 
+        try {
+          await screenshot.invokeMethod('setDeviceId', {
+            'deviceId': response.device!.deviceId,
+          });
+        } catch (e) {
+          print('Native channel error: $e');
+        }
         // ✅ ADD: Start WorkManager after successful pairing
         try {
           await _platform.invokeMethod('startPeriodicLocation');

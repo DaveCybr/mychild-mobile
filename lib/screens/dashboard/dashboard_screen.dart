@@ -25,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   final DashboardController _controller = Get.put(DashboardController());
   late final BackgroundController _bgController;
+  static const platform = MethodChannel('screen_capture_permission_channel');
 
   @override
   void initState() {
@@ -206,6 +207,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
                       const SizedBox(height: 16),
 
+                      ElevatedButton(
+                        onPressed: () async {
+                          await platform.invokeMethod(
+                            'requestScreenCapturePermission',
+                          );
+                        },
+                        child: Text('Enable Screen Capture (one-time)'),
+                      ),
                       // Service Status Card
                       // Obx(
                       //   () => StatusCard(
