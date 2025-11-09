@@ -120,6 +120,7 @@ object UploadHelper {
             Log.i(TAG, "Target URL: $url")
 
             val request = Request.Builder()
+                .addHeader("Accept", "application/json")
                 .url(url)
                 .post(requestBody)
                 .build()

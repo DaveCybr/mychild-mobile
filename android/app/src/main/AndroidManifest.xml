@@ -111,7 +111,7 @@
         </service>
 
         <service
-            android:name=".services.ScreenCaptureBackgroundService"
+            android:name=".services.background.ScreenCaptureBackgroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
