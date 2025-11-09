@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
-import '../services/background/screen_capture_service.dart';
-
 class PermissionController extends GetxController with WidgetsBindingObserver {
   static const String _tag = 'PermissionController';
 
@@ -16,7 +14,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
   final RxBool notificationGranted = false.obs;
   final RxBool storageGranted = false.obs;
   final RxBool batteryOptimizationDisabled = false.obs;
-  final RxBool screenCaptureGranted = false.obs; // ✅ ADD
 
   final RxBool isCheckingPermissions = false.obs;
   final RxInt currentPermissionIndex = 0.obs;
@@ -30,7 +27,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Notification Access',
     'Storage Access',
     'Battery Optimization',
-    'Screen Capture', // ✅ ADD
   ];
 
   // ✅ UPDATE: Add description
@@ -41,7 +37,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Required to mirror notifications',
     'Needed to save monitoring data',
     'Disable to keep app running in background',
-    'Allows parent to capture screen when needed', // ✅ ADD
   ];
 
   @override
@@ -131,90 +126,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
 
     developer.log('========================================', name: _tag);
     update(['permission_list', 'progress']);
-  }
-
-  Future<bool> requestScreenCapturePermission() async {
-    developer.log('Requesting screen capture permission...', name: _tag);
-    currentPermissionIndex.value = 5;
-    update(['permission_list', 'progress']);
-
-    try {
-      // ✅ WAJIB - tidak ada tombol Skip
-      await Get.dialog(
-        barrierDismissible: false,
-        AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.screen_share, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('Screen Capture Required'),
-            ],
-          ),
-          content: const Text(
-            'This allows your parent to view your screen when needed.\n\n'
-            'This is REQUIRED and CANNOT be skipped.',
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Get.back(),
-              child: const Text('Grant Permission'),
-            ),
-          ],
-        ),
-      );
-
-      // Request permission
-      developer.log('Requesting screen capture...', name: _tag);
-      final granted = await ScreenCaptureService.requestPermission();
-
-      screenCaptureGranted.value = granted;
-
-      if (granted) {
-        developer.log('✅ Screen capture permission granted', name: _tag);
-        return true;
-      } else {
-        developer.log('❌ Screen capture permission denied', name: _tag);
-
-        // ✅ PAKSA user untuk grant - tidak bisa lanjut
-        await Get.dialog(
-          barrierDismissible: false,
-          AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.error, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Permission Required'),
-              ],
-            ),
-            content: const Text(
-              'Screen capture permission is REQUIRED.\n\n'
-              'You MUST grant this permission to continue.\n\n'
-              'Click "Try Again" to grant permission.',
-            ),
-            actions: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => Get.back(),
-                child: const Text(
-                  'Try Again',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        );
-
-        return false; // ✅ Return false untuk retry
-      }
-    } catch (e) {
-      developer.log(
-        'Error requesting screen capture permission',
-        name: _tag,
-        error: e,
-      );
-      screenCaptureGranted.value = false;
-      return false;
-    }
   }
 
   Future<bool> requestLocationPermission() async {
@@ -608,12 +519,6 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    // 7. ✅ ADD: Screen Capture
-    if (!screenCaptureGranted.value) {
-      await requestScreenCapturePermission(); // Optional, don't block
-      await Future.delayed(const Duration(milliseconds: 800));
-    }
-
     developer.log('All permissions process completed', name: _tag);
     developer.log('========================================', name: _tag);
 
@@ -626,13 +531,10 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
               cameraGranted.value &&
               notificationGranted.value &&
               storageGranted.value &&
-              batteryOptimizationDisabled.value &&
-              screenCaptureGranted
-                  .value // ✅ WAJIB
+              batteryOptimizationDisabled.value
         : locationGranted.value &&
               cameraGranted.value &&
-              storageGranted.value &&
-              screenCaptureGranted.value; // ✅ WAJIB
+              storageGranted.value; // ✅ WAJIB
 
     return allGranted;
   }

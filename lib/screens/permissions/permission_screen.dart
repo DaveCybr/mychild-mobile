@@ -141,9 +141,6 @@ class _PermissionScreenState extends State<PermissionScreen>
       case 4: // Battery
         granted = await _controller.requestBatteryOptimization();
         break;
-      case 5: // Screen Capture - ✅ WAJIB
-        granted = await _controller.requestScreenCapturePermission();
-        break;
       default:
         granted = true;
     }
@@ -349,8 +346,6 @@ class _PermissionScreenState extends State<PermissionScreen>
         return _controller.storageGranted.value;
       case 4:
         return _controller.batteryOptimizationDisabled.value;
-      case 5:
-        return _controller.screenCaptureGranted.value; // ✅ ADD
       default:
         return false;
     }
