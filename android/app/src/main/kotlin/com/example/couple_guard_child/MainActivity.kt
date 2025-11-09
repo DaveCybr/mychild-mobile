@@ -1,32 +1,31 @@
 package com.example.couple_guard_child
 
+import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
-import com.example.couple_guard_child.services.ScreenCapturePermissionActivity
+import com.example.couple_guard_child.services.background.ScreenCaptureForegroundService
 import com.example.couple_guard_child.workers.LocationWorkManager
-import java.io.File
-import java.io.FileOutputStream
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "notification_listener_channel"
     private val LOCATION_CHANNEL = "location_worker_channel"
-    private val SCREEN_CAPTURE_CHANNEL = "screen_capture_permission_channel" // ✅ ADD
+    private val SCREEN_CAPTURE_CHANNEL = "screen_capture_permission_channel"
     private val TAG = "MainActivity"
     
-    // ✅ ADD: Request code untuk screen capture permission
     private val REQUEST_CODE_SCREEN_CAPTURE = 1001
     private var screenCaptureResult: MethodChannel.Result? = null
 
@@ -90,7 +89,7 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "Configuring Flutter Engine")
         
-        // Existing notification channel...
+        // Notification channel
         val notifChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger, 
             CHANNEL
@@ -115,8 +114,8 @@ class MainActivity: FlutterActivity() {
                 }
                 "requestProjection" -> {
                     val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                    startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE)
-                    resultCallback = result
+                    startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_CAPTURE)
+                    screenCaptureResult = result
                 }
                 "isAccessibilityEnabled" -> {
                     val enabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
@@ -136,11 +135,34 @@ class MainActivity: FlutterActivity() {
                         result.error("HEARTBEAT_ERROR", e.message, null)
                     }
                 }
+                "checkBatteryOptimization" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                        val isIgnoring = powerManager.isIgnoringBatteryOptimizations(packageName)
+                        result.success(isIgnoring)
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "requestBatteryOptimization" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            intent.data = android.net.Uri.parse("package:$packageName")
+                            startActivity(intent)
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    } else {
+                        result.success(null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
         
-        // Existing location channel...
+        // Location channel
         val locationChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             LOCATION_CHANNEL
@@ -196,7 +218,7 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "✅ Location MethodChannel registered")
         
-        // ✅ ADD: Screen capture permission channel
+        // Screen capture permission channel
         val screenCaptureChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             SCREEN_CAPTURE_CHANNEL
@@ -206,7 +228,7 @@ class MainActivity: FlutterActivity() {
             when (call.method) {
                 "requestProjection" -> {
                     requestProjectionPermission()
-                    result.success(true) // we will start activity; actual start result handled in onActivityResult
+                    result.success(true)
                 }
                 "setDeviceId" -> {
                     val deviceId = (call.argument<String>("deviceId") ?: "")
@@ -228,7 +250,7 @@ class MainActivity: FlutterActivity() {
     }
     
     private fun requestProjectionPermission() {
-        val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as android.media.projection.MediaProjectionManager
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val intent = mgr.createScreenCaptureIntent()
         startActivityForResult(intent, REQUEST_CODE_SCREEN_CAPTURE)
     }
@@ -243,16 +265,23 @@ class MainActivity: FlutterActivity() {
                     putExtra(ScreenCaptureForegroundService.EXTRA_RESULT_CODE, resultCode)
                     putExtra(ScreenCaptureForegroundService.EXTRA_RESULT_INTENT, data)
                 }
-                startForegroundService(svcIntent)
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svcIntent)
+                } else {
+                    startService(svcIntent)
+                }
+                
+                Log.d(TAG, "✅ Screen capture service started")
             } else {
-                Log.w("MainActivity", "User denied screen capture permission")
+                Log.w(TAG, "❌ User denied screen capture permission")
             }
         }
     }
 
     private fun isNotificationServiceEnabled(): Boolean {
         val pkgName = packageName
-        val flat = android.provider.Settings.Secure.getString(
+        val flat = Settings.Secure.getString(
             contentResolver,
             "enabled_notification_listeners"
         )
@@ -268,7 +297,7 @@ class MainActivity: FlutterActivity() {
 
     private fun openNotificationListenerSettings() {
         Log.d(TAG, "Opening notification listener settings")
-        val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         startActivity(intent)
     }
 }

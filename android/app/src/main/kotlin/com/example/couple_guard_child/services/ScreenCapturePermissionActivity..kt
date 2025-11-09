@@ -49,7 +49,7 @@ class ScreenCapturePermissionActivity : Activity() {
                 }
                 
                 // Save to memory
-                ScreenCaptureBackgroundService.savePermission(resultCode, data)
+                // ScreenCaptureForegroundService.savePermission(resultCode, data)
                 
                 Log.d(TAG, "✅ Permission saved")
             } catch (e: Exception) {
