@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<accessibility-service
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeAllMask"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:notificationTimeout="100"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
-    android:settingsActivity=""
     android:description="@string/accessibility_service_description"
-    android:accessibilityFlags="flagDefault"/>
+    android:notificationTimeout="100"
+    android:packageNames="com.example.couple_guard_child"
+    android:settingsActivity="com.example.couple_guard_child.MainActivity" />

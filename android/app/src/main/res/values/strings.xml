@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Family Safety</string>
+    
+    <string name="accessibility_service_description">
+        Family Safety uses this service to capture screenshots for parental monitoring. 
+        This feature requires explicit consent and is used only for family safety purposes.
+    </string>
+    
+    <string name="notification_channel_name">Background Service</string>
+    <string name="notification_channel_description">Keeps the app running for family safety monitoring</string>
+    
+    <string name="geofence_channel_name">Geofence Alerts</string>
+    <string name="geofence_channel_description">Alerts when device leaves safe zone</string>
+    
+    <string name="service_notification_title">Family Safety Active</string>
+    <string name="service_notification_content">Location tracking and monitoring enabled</string>
+    
+    <string name="camera_notification_title">Camera Capture</string>
+    <string name="camera_notification_content">Taking photo for safety monitoring</string>
+    
+    <string name="screen_capture_notification_title">Screen Capture</string>
+    <string name="screen_capture_notification_content">Capturing screen for monitoring</string>
+    
+    <string name="permission_location_rationale">Location permission is required for family safety tracking</string>
+    <string name="permission_camera_rationale">Camera permission is needed for emergency photo capture</string>
+    <string name="permission_notification_rationale">Notification access is required to mirror app notifications</string>
+    
+    <string name="device_admin_label">Family Safety Admin</string>
+    <string name="device_admin_description">Enable to protect app from uninstallation</string>
+</resources>

@@ -17,7 +17,6 @@ import io.flutter.plugin.common.MethodChannel
 import com.example.couple_guard_child.services.background.MyNotificationListenerService
 import com.example.couple_guard_child.services.ScreenCapturePermissionActivity
 import com.example.couple_guard_child.workers.LocationWorkManager
-import com.example.couple_guard_child.utils.BatteryOptimizationHelper
 import java.io.File
 import java.io.FileOutputStream
 
@@ -113,14 +112,6 @@ class MainActivity: FlutterActivity() {
                 "minimizeApp" -> {
                     moveTaskToBack(true)
                     result.success(null)
-                }
-                "requestBatteryOptimization" -> {
-                    BatteryOptimizationHelper.requestDisableBatteryOptimization(applicationContext)
-                    result.success(null)
-                }
-                "checkBatteryOptimization" -> {
-                    val isIgnoring = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(applicationContext)
-                    result.success(isIgnoring)
                 }
                 "requestProjection" -> {
                     val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager

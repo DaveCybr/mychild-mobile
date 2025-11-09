@@ -1,10 +1,9 @@
-// screens/permissions/permission_screen.dart - COMPLETE FIX
+// screens/permissions/permission_screen.dart - FIXED
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:developer' as developer;
 import '../../core/constants/app_colors.dart';
 import '../../controllers/permission_controller.dart';
-import '../../services/background/screen_capture_service.dart';
 import '../../services/local/local_storage_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -27,14 +26,8 @@ class _PermissionScreenState extends State<PermissionScreen>
     super.initState();
     developer.log('Permission screen initialized', name: _tag);
 
-    // Add lifecycle observer
     WidgetsBinding.instance.addObserver(this);
-
-    // Initialize controller
     _controller = Get.put(PermissionController(), permanent: false);
-
-    // Check if already all granted
-    // _checkIfAllGranted();
   }
 
   @override
@@ -52,75 +45,83 @@ class _PermissionScreenState extends State<PermissionScreen>
     if (state == AppLifecycleState.resumed) {
       developer.log('App resumed, checking permissions...', name: _tag);
 
-      // Re-check permissions when app resumes
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _controller.checkAllPermissions();
-          // _checkIfAllGranted();
         }
       });
     }
   }
 
-  Future<void> _checkIfAllGranted() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted && _controller.areAllPermissionsGranted()) {
-      developer.log(
-        '✅ All permissions granted, navigating to dashboard',
-        name: _tag,
-      );
-
-      await LocalStorageService.setPermissionCompleted(true);
-
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        Get.offAll(() => const DashboardScreen());
-      }
-    }
-  }
-
-  // lib/screens/permissions/permission_screen.dart
-
+  // ✅ FIX: Prevent infinite loop with proper state management
   Future<void> _requestNextPermission() async {
     final index = _controller.currentPermissionIndex.value;
 
     developer.log('========================================', name: _tag);
     developer.log('Processing permission index: $index', name: _tag);
 
-    if (index >= _controller.permissionTitles.length) {
-      // ✅ Semua permission granted
-      developer.log('All permissions granted!', name: _tag);
+    // ✅ Check if all permissions are granted first
+    if (_controller.areAllPermissionsGranted()) {
+      developer.log('✅ All permissions granted!', name: _tag);
       await LocalStorageService.setPermissionCompleted(true);
 
+      await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
         Get.offAll(() => const DashboardScreen());
       }
       return;
     }
 
+    // ✅ Check bounds
+    if (index >= _controller.permissionTitles.length) {
+      developer.log('Index out of bounds, checking completion', name: _tag);
+
+      if (_controller.areAllPermissionsGranted()) {
+        await LocalStorageService.setPermissionCompleted(true);
+        if (mounted) {
+          Get.offAll(() => const DashboardScreen());
+        }
+      }
+      return;
+    }
+
     bool granted = false;
 
+    // ✅ FIX: Better permission flow
     switch (index) {
-      case 0: // Location
+      case 0: // Location (Foreground)
         granted = await _controller.requestLocationPermission();
+        if (granted) {
+          // Immediately request background location
+          _controller.currentPermissionIndex.value = 1;
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) _requestNextPermission();
+        }
         break;
-      case 1: // Camera
+
+      case 1: // Background Location
         granted = await _controller.requestCameraPermission();
         break;
-      case 2: // Notification
+
+      case 2: // Camera
         granted = await _controller.requestNotificationPermission();
         break;
-      case 3: // Storage
+
+      case 3: // Notification
         granted = await _controller.requestStoragePermission();
         break;
-      case 4: // Battery
+
+      case 4: // Storage
         granted = await _controller.requestBatteryOptimization();
         break;
-      case 5: // Screen Capture - ✅ WAJIB
+
+      case 5: // Battery
         granted = await _controller.requestScreenCapturePermission();
         break;
+
+      case 6: // Screen Capture
+        granted = await _controller.requestAccessibilityService();
+
       default:
         granted = true;
     }
@@ -129,32 +130,32 @@ class _PermissionScreenState extends State<PermissionScreen>
     developer.log('========================================', name: _tag);
 
     if (granted) {
-      // ✅ Lanjut ke permission berikutnya
+      // Move to next permission
       _controller.currentPermissionIndex.value = index + 1;
       await Future.delayed(const Duration(milliseconds: 800));
 
       if (mounted) {
+        // Check if all granted
         if (_controller.areAllPermissionsGranted()) {
-          // Semua granted, ke dashboard
-          _checkIfAllGranted();
+          await LocalStorageService.setPermissionCompleted(true);
+          Get.offAll(() => const DashboardScreen());
         } else {
-          // Lanjut ke permission berikutnya
+          // Continue to next permission
           _requestNextPermission();
         }
       }
     } else {
-      // ❌ TIDAK GRANTED - RETRY permission yang sama
-      developer.log(
-        'Permission denied, retrying same permission...',
-        name: _tag,
+      // ✅ FIX: Don't infinite loop - let user manually retry
+      developer.log('Permission denied, waiting for manual retry', name: _tag);
+
+      Get.snackbar(
+        'Permission Required',
+        'Please grant this permission to continue',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: AppColors.warning,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
       );
-
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      if (mounted) {
-        // ✅ RETRY permission yang sama (tidak increment index)
-        _requestNextPermission();
-      }
     }
   }
 
@@ -165,13 +166,11 @@ class _PermissionScreenState extends State<PermissionScreen>
       appBar: AppBar(
         title: const Text('Setup Permissions'),
         actions: [
-          // Refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
               developer.log('Manual refresh triggered', name: _tag);
               _controller.checkAllPermissions();
-              _checkIfAllGranted();
             },
             tooltip: 'Refresh Status',
           ),
@@ -213,9 +212,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                   id: 'permission_list',
                   builder: (controller) {
                     return ListView.builder(
-                      itemCount: controller
-                          .permissionTitles
-                          .length, // ✅ Was: -1, now include all
+                      itemCount: controller.permissionTitles.length,
                       itemBuilder: (context, index) {
                         final isCurrentOrPast =
                             index <= controller.currentPermissionIndex.value;
@@ -242,10 +239,8 @@ class _PermissionScreenState extends State<PermissionScreen>
                 id: 'progress',
                 builder: (controller) {
                   final totalPermissions = controller.permissionTitles.length;
-                  final completedPermissions =
-                      controller.currentPermissionIndex.value;
-
-                  final progress = completedPermissions / totalPermissions;
+                  final grantedCount = _getGrantedCount();
+                  final progress = grantedCount / totalPermissions;
 
                   return Column(
                     children: [
@@ -253,7 +248,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '$completedPermissions of $totalPermissions required', // ✅ All required
+                            '$grantedCount of $totalPermissions granted',
                             style: const TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondary,
@@ -290,19 +285,18 @@ class _PermissionScreenState extends State<PermissionScreen>
 
               Obx(
                 () => CustomButton(
-                  text:
-                      _controller
-                          .areAllCriticalPermissionsGranted() // ✅ Critical only
+                  text: _controller.areAllPermissionsGranted()
                       ? 'Continue to Dashboard'
                       : 'Grant Permissions',
                   onPressed: () {
-                    if (_controller.areAllCriticalPermissionsGranted()) {
-                      _checkIfAllGranted();
+                    if (_controller.areAllPermissionsGranted()) {
+                      LocalStorageService.setPermissionCompleted(true);
+                      Get.offAll(() => const DashboardScreen());
                     } else {
                       _requestNextPermission();
                     }
                   },
-                  icon: _controller.areAllCriticalPermissionsGranted()
+                  icon: _controller.areAllPermissionsGranted()
                       ? const Icon(Icons.arrow_forward, color: Colors.white)
                       : const Icon(Icons.lock_open, color: Colors.white),
                 ),
@@ -312,6 +306,18 @@ class _PermissionScreenState extends State<PermissionScreen>
         ),
       ),
     );
+  }
+
+  int _getGrantedCount() {
+    int count = 0;
+    if (_controller.locationGranted.value) count++;
+    if (_controller.cameraGranted.value) count++;
+    if (_controller.notificationGranted.value) count++;
+    if (_controller.storageGranted.value) count++;
+    if (_controller.batteryOptimizationDisabled.value) count++;
+    if (_controller.screenCaptureGranted.value) count++;
+    if (_controller.accessibilityGranted.value) count++;
+    return count;
   }
 
   bool _getPermissionStatus(int index) {
@@ -327,7 +333,9 @@ class _PermissionScreenState extends State<PermissionScreen>
       case 4:
         return _controller.batteryOptimizationDisabled.value;
       case 5:
-        return _controller.screenCaptureGranted.value; // ✅ ADD
+        return _controller.screenCaptureGranted.value;
+      case 6:
+        return _controller.accessibilityGranted.value;
       default:
         return false;
     }

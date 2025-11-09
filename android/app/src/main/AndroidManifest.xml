@@ -19,30 +19,24 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" android:minSdkVersion="34"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
-    <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" />
 
     <!-- CAMERA -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- STORAGE - Android 13+ -->
+    <!-- STORAGE -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    
-    <!-- STORAGE - Android 12 and below -->
-    <!-- FIX: Add tools:replace to resolve conflict with camera library -->
     <uses-permission 
         android:name="android.permission.READ_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32" 
         tools:replace="android:maxSdkVersion"/>
-    
     <uses-permission 
         android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32" 
         tools:replace="android:maxSdkVersion"/>
 
     <!-- NOTIFICATION -->
-    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- BATTERY -->
@@ -50,12 +44,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <!-- SYSTEM -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-   
 
     <application
         android:label="Family Safety"
@@ -64,6 +55,7 @@
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
 
+        <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -83,6 +75,7 @@
             </intent-filter>
         </activity>
 
+        <!-- TRANSPARENT ACTIVITIES -->
         <activity
             android:name=".services.CameraTransparentActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
@@ -98,6 +91,7 @@
             android:exported="false"
             android:taskAffinity="" />
 
+        <!-- ✅ BACKGROUND SERVICE (Flutter) -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
@@ -105,23 +99,26 @@
             android:stopWithTask="false"
             tools:replace="android:exported,android:stopWithTask"
             android:foregroundServiceType="location|specialUse|dataSync">
-             <property
+            <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Family safety monitoring and location tracking" />
         </service>
 
-        <!-- <service
-            android:name=".services.ScreenCaptureBackgroundService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" /> -->
-
+        <!-- ✅ CAMERA SERVICE -->
         <service
             android:name=".services.CameraBackgroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="camera" />
 
+        <!-- ✅ SCREEN CAPTURE SERVICE -->
+        <service
+            android:name=".services.background.ScreenCaptureForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- ✅ ACCESSIBILITY SERVICE (for screenshot Android 11+) -->
         <service
             android:name=".services.MyAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -129,66 +126,12 @@
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
-
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
-        
-        <receiver 
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
 
-        <receiver
-            android:name=".TaskRemovedReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".admin.MyDeviceAdminReceiver"
-            android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin_policies" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
-
-
-        <receiver 
-            android:name=".receivers.RestartServiceReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_CHECK_SERVICE" />
-            </intent-filter>
-        </receiver>
-
-        <!-- NotificationRebindReceiver -->
-        <receiver 
-            android:name=".receivers.NotificationRebindReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER" />
-            </intent-filter>
-        </receiver>
-
+        <!-- ✅ NOTIFICATION LISTENER SERVICE -->
         <service 
             android:name=".services.background.MyNotificationListenerService"
             android:label="Family Safety Listener"
@@ -200,28 +143,66 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-            
-            <!-- ✅ ADD: Meta-data untuk prevent killing -->
             <meta-data
                 android:name="android.service.notification.listener.settings"
                 android:value="true" />
         </service>
 
+        <!-- ✅ FCM SERVICE -->
         <service
             android:name=".fcm.MyFirebaseMessagingService"
-            android:exported="false">
+            android:exported="false"
+            android:directBootAware="true"
+            android:stopWithTask="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
-        <receiver
-            android:name=".NotificationServiceRestarter"
+        <!-- ✅ BOOT RECEIVER -->
+        <receiver 
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ✅ SERVICE RESTART RECEIVER (AlarmManager) -->
+        <receiver 
+            android:name=".receivers.RestartServiceReceiver"
             android:enabled="true"
             android:exported="false">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="com.example.couple_guard_child.ACTION_CHECK_SERVICE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ✅ NOTIFICATION REBIND RECEIVER -->
+        <receiver 
+            android:name=".receivers.NotificationRebindReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ✅ DEVICE ADMIN RECEIVER (Optional - untuk proteksi uninstall) -->
+        <receiver
+            android:name=".admin.MyDeviceAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
 
