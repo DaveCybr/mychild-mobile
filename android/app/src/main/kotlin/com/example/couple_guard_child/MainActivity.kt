@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -226,9 +227,10 @@ class MainActivity: FlutterActivity() {
         
         screenCaptureChannel.setMethodCallHandler { call, result ->
             when (call.method) {
-                "requestProjection" -> {
+                "requestScreenCapturePermission" -> {
+                    val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
                     requestProjectionPermission()
-                    result.success(true)
+                    result.success(hasPermission) 
                 }
                 "setDeviceId" -> {
                     val deviceId = (call.argument<String>("deviceId") ?: "")
@@ -248,6 +250,12 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "✅ Screen Capture MethodChannel registered")
     }
+
+    private fun requestProjectionPermission() {
+        val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as android.media.projection.MediaProjectionManager
+        val intent = mgr.createScreenCaptureIntent()
+        startActivityForResult(intent, REQUEST_CODE_SCREEN_CAPTURE)
+    }
     
     private fun requestProjectionPermission() {
         val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -257,25 +265,18 @@ class MainActivity: FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        
         if (requestCode == REQUEST_CODE_SCREEN_CAPTURE) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                // Start foreground service and pass the intent
-                val svcIntent = Intent(this, ScreenCaptureForegroundService::class.java).apply {
-                    action = ScreenCaptureForegroundService.ACTION_START
-                    putExtra(ScreenCaptureForegroundService.EXTRA_RESULT_CODE, resultCode)
-                    putExtra(ScreenCaptureForegroundService.EXTRA_RESULT_INTENT, data)
-                }
-                
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(svcIntent)
-                } else {
-                    startService(svcIntent)
-                }
-                
-                Log.d(TAG, "✅ Screen capture service started")
-            } else {
-                Log.w(TAG, "❌ User denied screen capture permission")
-            }
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📋 SCREEN CAPTURE PERMISSION RESULT")
+            Log.d(TAG, "Result Code: $resultCode")
+            
+            val granted = resultCode == RESULT_OK
+            Log.d(TAG, if (granted) "✅ GRANTED" else "❌ DENIED")
+            Log.d(TAG, "========================================")
+            
+            screenCaptureResult?.success(granted)
+            screenCaptureResult = null
         }
     }
 
