@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +29,7 @@ class MainActivity: FlutterActivity() {
     private val TAG = "MainActivity"
     
     // ✅ ADD: Request code untuk screen capture permission
-    private val REQUEST_SCREEN_CAPTURE_PERMISSION = 9001
+    private val REQUEST_CODE_SCREEN_CAPTURE = 9001
     private var screenCaptureResult: MethodChannel.Result? = null
 
     companion object {
@@ -205,10 +206,9 @@ class MainActivity: FlutterActivity() {
         screenCaptureChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestScreenCapturePermission" -> {
-                    val intent = Intent(this, ScreenCapturePermissionActivity::class.java)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                    result.success(true)
+                    val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
+                    requestProjectionPermission()
+                    result.success(hasPermission) 
                 }
                 "hasScreenCapturePermission" -> {
                     val hasPermission = ScreenCapturePermissionActivity.hasSavedPermission(this)
@@ -220,12 +220,18 @@ class MainActivity: FlutterActivity() {
         
         Log.d(TAG, "✅ Screen Capture MethodChannel registered")
     }
+
+    private fun requestProjectionPermission() {
+        val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as android.media.projection.MediaProjectionManager
+        val intent = mgr.createScreenCaptureIntent()
+        startActivityForResult(intent, REQUEST_CODE_SCREEN_CAPTURE)
+    }
     
     // ✅ ADD: Handle result dari ScreenCapturePermissionActivity
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         
-        if (requestCode == REQUEST_SCREEN_CAPTURE_PERMISSION) {
+        if (requestCode == REQUEST_CODE_SCREEN_CAPTURE) {
             Log.d(TAG, "========================================")
             Log.d(TAG, "📋 SCREEN CAPTURE PERMISSION RESULT")
             Log.d(TAG, "Result Code: $resultCode")
