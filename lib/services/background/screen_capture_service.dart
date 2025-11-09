@@ -54,6 +54,19 @@ class ScreenCaptureService {
     }
   }
 
+  static Future<bool> isAccessibilityEnabled() async {
+    try {
+      final bool? result = await _platform.invokeMethod(
+        'isAccessibilityEnabled',
+      );
+      developer.log('Accessibility enabled: $result', name: _tag);
+      return result ?? false;
+    } catch (e) {
+      developer.log('Error checking accessibility', name: _tag, error: e);
+      return false;
+    }
+  }
+
   // ✅ UPDATE: Request permission and save status
   static Future<bool> requestPermission() async {
     developer.log('========================================', name: _tag);
@@ -62,9 +75,7 @@ class ScreenCaptureService {
     try {
       if (Platform.isAndroid) {
         // ✅ Call native method to launch permission activity
-        final bool? result = await _platform.invokeMethod(
-          'requestScreenCapturePermission',
-        );
+        final bool? result = await _platform.invokeMethod('requestProjection');
 
         if (result == true) {
           // Save to local storage

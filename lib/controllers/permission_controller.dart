@@ -1,4 +1,7 @@
 // controllers/permission_controller.dart - LOCATION FIX
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
@@ -17,6 +20,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
   final RxBool storageGranted = false.obs;
   final RxBool batteryOptimizationDisabled = false.obs;
   final RxBool screenCaptureGranted = false.obs; // ✅ ADD
+  final RxBool accessibilityGranted = false.obs; //
 
   final RxBool isCheckingPermissions = false.obs;
   final RxInt currentPermissionIndex = 0.obs;
@@ -30,7 +34,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Notification Access',
     'Storage Access',
     'Battery Optimization',
-    'Screen Capture', // ✅ ADD
+    'Accessibility Service',
   ];
 
   // ✅ UPDATE: Add description
@@ -41,7 +45,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     'Required to mirror notifications',
     'Needed to save monitoring data',
     'Disable to keep app running in background',
-    'Allows parent to capture screen when needed', // ✅ ADD
+    'Required for automatic screen capture via Accessibility', // ✅ ADD
   ];
 
   @override
@@ -101,6 +105,7 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
           await Permission.storage.isGranted ||
           await Permission.photos.isGranted;
       developer.log('Storage: ${storageGranted.value}', name: _tag);
+      screenCaptureGranted.value = await ScreenCaptureService.isSupported();
 
       if (Platform.isAndroid) {
         notificationGranted.value =
@@ -133,87 +138,80 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
     update(['permission_list', 'progress']);
   }
 
-  Future<bool> requestScreenCapturePermission() async {
-    developer.log('Requesting screen capture permission...', name: _tag);
-    currentPermissionIndex.value = 5;
+  Future<bool> requestAccessibilityService() async {
+    developer.log('Requesting Accessibility Service...', name: _tag);
+    currentPermissionIndex.value = permissionTitles.length - 1;
     update(['permission_list', 'progress']);
 
-    try {
-      // ✅ WAJIB - tidak ada tombol Skip
-      await Get.dialog(
-        barrierDismissible: false,
-        AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.screen_share, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('Screen Capture Required'),
-            ],
-          ),
-          content: const Text(
-            'This allows your parent to view your screen when needed.\n\n'
-            'This is REQUIRED and CANNOT be skipped.',
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Get.back(),
-              child: const Text('Grant Permission'),
-            ),
+    // WAJIB: dialog sebelum diarahkan ke Settings
+    await Get.dialog(
+      barrierDismissible: false,
+      AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.accessibility, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Accessibility Service Required'),
           ],
         ),
-      );
-
-      // Request permission
-      developer.log('Requesting screen capture...', name: _tag);
-      final granted = await ScreenCaptureService.requestPermission();
-
-      screenCaptureGranted.value = granted;
-
-      if (granted) {
-        developer.log('✅ Screen capture permission granted', name: _tag);
-        return true;
-      } else {
-        developer.log('❌ Screen capture permission denied', name: _tag);
-
-        // ✅ PAKSA user untuk grant - tidak bisa lanjut
-        await Get.dialog(
-          barrierDismissible: false,
-          AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.error, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Permission Required'),
-              ],
-            ),
-            content: const Text(
-              'Screen capture permission is REQUIRED.\n\n'
-              'You MUST grant this permission to continue.\n\n'
-              'Click "Try Again" to grant permission.',
-            ),
-            actions: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => Get.back(),
-                child: const Text(
-                  'Try Again',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
+        content: const Text(
+          'To allow automatic screen capture, you MUST enable Accessibility Service for this app.\n\n'
+          'Tap "Open Settings" and enable the service.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Get.back(),
+            child: const Text('Open Settings'),
           ),
-        );
+        ],
+      ),
+    );
+    // Buka halaman Accessibility Settings
+    final intent = AndroidIntent(
+      action: 'android.settings.ACCESSIBILITY_SETTINGS',
+      flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+    );
+    await intent.launch();
 
-        return false; // ✅ Return false untuk retry
-      }
-    } catch (e) {
-      developer.log(
-        'Error requesting screen capture permission',
-        name: _tag,
-        error: e,
+    // Tunggu user aktifkan dan kembali ke app
+    isWaitingForSettings.value = true;
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Cek status service
+    final granted = await ScreenCaptureService.isAccessibilityEnabled();
+    accessibilityGranted.value = granted;
+    update(['permission_list']);
+    return granted;
+  }
+
+  Future<bool> requestScreenCapturePermission() async {
+    developer.log('Requesting screen capture permission...', name: _tag);
+
+    final granted = await ScreenCaptureService.isSupported();
+
+    if (granted) {
+      screenCaptureGranted.value = true;
+      return true;
+    }
+
+    if (Platform.isAndroid) {
+      developer.log('Opening Accessibility Settings...', name: _tag);
+
+      final intent = AndroidIntent(
+        action: 'android.settings.ACCESSIBILITY_SETTINGS',
+        flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
       );
+
+      await intent.launch();
+
+      // Tunggu user aktifkan service (cek saat app resumed)
       screenCaptureGranted.value = false;
       return false;
+    } else {
+      // iOS: auto-granted
+      await ScreenCaptureService.requestPermission();
+      screenCaptureGranted.value = true;
+      return true;
     }
   }
 
@@ -608,9 +606,8 @@ class PermissionController extends GetxController with WidgetsBindingObserver {
       await Future.delayed(const Duration(milliseconds: 800));
     }
 
-    // 7. ✅ ADD: Screen Capture
-    if (!screenCaptureGranted.value) {
-      await requestScreenCapturePermission(); // Optional, don't block
+    if (!accessibilityGranted.value) {
+      await requestAccessibilityService();
       await Future.delayed(const Duration(milliseconds: 800));
     }
 

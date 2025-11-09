@@ -62,29 +62,6 @@ class _PermissionScreenState extends State<PermissionScreen>
     }
   }
 
-  Future<void> _checkScreenCapturePermission() async {
-    try {
-      final isSupported = await ScreenCaptureService.isSupported();
-
-      developer.log('Screen capture supported: $isSupported', name: _tag);
-
-      if (!isSupported) {
-        developer.log('⚠️ Requesting screen capture permission...', name: _tag);
-        final granted = await ScreenCaptureService.requestPermission();
-        developer.log(
-          'Screen capture permission granted: $granted',
-          name: _tag,
-        );
-      }
-    } catch (e) {
-      developer.log(
-        'Error checking screen capture permission',
-        name: _tag,
-        error: e,
-      );
-    }
-  }
-
   Future<void> _checkIfAllGranted() async {
     await Future.delayed(const Duration(milliseconds: 500));
 
