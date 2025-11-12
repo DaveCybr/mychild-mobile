@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/values/strings.xml -->
+<resources>
+    <string name="app_name">Family Safety</string>
+    
+    <!-- ✅ Accessibility Service Strings -->
+    <string name="accessibility_service_label">Family Safety Monitor</string>
+    <string name="accessibility_service_description">
+        This service monitors device activity for family safety purposes. 
+        It helps parents keep their children safe by:
+        \n• Monitoring app usage
+        \n• Detecting inappropriate content
+        \n• Tracking screen time
+        \n• Recording notifications
+        \n\nThis service does NOT share any data with third parties and is only accessible by the paired parent device.
+    </string>
+    
+    <!-- Device Admin Strings -->
+    <string name="device_admin_label">Family Safety Protection</string>
+    <string name="device_admin_description">
+        Allows Family Safety to protect this device and prevent unauthorized uninstallation.
+    </string>
+</resources>

