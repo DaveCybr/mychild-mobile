@@ -1,97 +1,81 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.couple_guard_child">
 
-    <!-- LOCATION -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/> 
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/> 
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
-
-    <!-- INTERNET -->
-    <uses-permission android:name="android.permission.INTERNET"/> 
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-
-    <!-- FOREGROUND SERVICE -->
+    <!-- ========================================== -->
+    <!-- PERMISSIONS -->
+    <!-- ========================================== -->
+    
+    <!-- Location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    
+    <!-- Foreground Service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" android:minSdkVersion="34"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" android:minSdkVersion="34"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
-
-    <!-- CAMERA -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-
-    <!-- STORAGE -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission 
-        android:name="android.permission.READ_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="32" 
-        tools:replace="android:maxSdkVersion"/>
-    <uses-permission 
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
-        android:maxSdkVersion="32" 
-        tools:replace="android:maxSdkVersion"/>
-
-    <!-- NOTIFICATION -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <!-- BATTERY -->
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
-
-    <!-- SYSTEM -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    
+    <!-- Boot & Auto-start -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
+    <!-- Battery Optimization -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- Network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- FCM -->
+    <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+    
+    <!-- Battery Status -->
+    <uses-permission android:name="android.permission.BATTERY_STATS" />
+    
+    <!-- Post Notifications (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Schedule Exact Alarm (Android 12+) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
-        android:label="Family Safety"
-        android:name="${applicationName}"
+        android:name=".MyApplication"
+        android:label="Couple Guard Child"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         tools:replace="android:label">
 
-        <!-- MAIN ACTIVITY -->
+        <!-- ========================================== -->
+        <!-- MAIN ACTIVITY (Flutter) -->
+        <!-- ========================================== -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-
+            
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-
+            
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- TRANSPARENT ACTIVITIES -->
-        <activity
-            android:name=".services.CameraTransparentActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleInstance"
-            android:taskAffinity="" />
+        <!-- ========================================== -->
+        <!-- FLUTTER BACKGROUND SERVICE -->
+        <!-- ✅ ADDED: This was missing! -->
+        <!-- ========================================== -->
 
-        <activity
-            android:name=".services.ScreenCapturePermissionActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:taskAffinity="" />
-
-        <!-- ✅ BACKGROUND SERVICE (Flutter) -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
@@ -104,117 +88,101 @@
                 android:value="Family safety monitoring and location tracking" />
         </service>
 
-        <!-- ✅ CAMERA SERVICE -->
+        <!-- ========================================== -->
+        <!-- GEOLOCATOR SERVICE -->
+        <!-- ✅ ADDED: For geolocator plugin -->
+        <!-- ========================================== -->
         <service
-            android:name=".services.CameraBackgroundService"
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:foregroundServiceType="location" />
 
-        <!-- ✅ SCREEN CAPTURE SERVICE -->
+        <!-- ========================================== -->
+        <!-- PERSISTENT SERVICE (Your custom service) -->
+        <!-- ========================================== -->
         <service
-            android:name=".services.background.ScreenCaptureForegroundService"
+            android:name=".services.PersistentService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="location|dataSync"
+            android:stopWithTask="false" />
 
-        <!-- ✅ ACCESSIBILITY SERVICE (for screenshot Android 11+) -->
+
+        <!-- ========================================== -->
+        <!-- NOTIFICATION LISTENER SERVICE -->
+        <!-- ========================================== -->
         <service
-            android:name=".services.MyAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <!-- ✅ NOTIFICATION LISTENER SERVICE -->
-        <service 
-            android:name=".services.background.MyNotificationListenerService"
-            android:label="Family Safety Listener"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:name=".services.NotificationListenerServiceImpl"
+            android:enabled="true"
             android:exported="true"
-            android:stopWithTask="false"
-            android:enabled="true"
-            android:directBootAware="true">
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-            <meta-data
-                android:name="android.service.notification.listener.settings"
-                android:value="true" />
         </service>
 
-        <!-- ✅ FCM SERVICE -->
+        <!-- ========================================== -->
+        <!-- FIREBASE MESSAGING SERVICE -->
+        <!-- ========================================== -->
         <service
-            android:name=".fcm.MyFirebaseMessagingService"
-            android:exported="false"
-            android:directBootAware="true"
-            android:stopWithTask="false">
+            android:name=".services.PushService"
+            android:enabled="true"
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
-        <!-- ✅ BOOT RECEIVER -->
-        <receiver 
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:directBootAware="true"
-            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
-
-        <!-- ✅ SERVICE RESTART RECEIVER (AlarmManager) -->
-        <receiver 
-            android:name=".receivers.RestartServiceReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_CHECK_SERVICE" />
-            </intent-filter>
-        </receiver>
-
-        <!-- ✅ NOTIFICATION REBIND RECEIVER -->
-        <receiver 
-            android:name=".receivers.NotificationRebindReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.couple_guard_child.ACTION_REBIND_NOTIFICATION_LISTENER" />
-            </intent-filter>
-        </receiver>
-
-        <!-- ✅ DEVICE ADMIN RECEIVER (Optional - untuk proteksi uninstall) -->
+        <!-- ========================================== -->
+        <!-- BOOT RECEIVER -->
+        <!-- ========================================== -->
         <receiver
-            android:name=".admin.MyDeviceAdminReceiver"
+            android:name=".receivers.BootReceiver"
+            android:enabled="true"
             android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin_policies" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            android:directBootAware="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
+        <!-- ========================================== -->
+        <!-- FLUTTER PLUGINS METADATA -->
+        <!-- ========================================== -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Firebase Messaging -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+        
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/holo_blue_light" />
+        
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="default_channel" />
+
+        <!-- WorkManager -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
     </application>
 
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT" />
-            <data android:mimeType="text/plain" />
-        </intent>
-    </queries>
 </manifest>

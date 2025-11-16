@@ -1,212 +1,182 @@
 package com.example.couple_guard_child.workers
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.os.BatteryManager
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.google.android.gms.location.*
-import kotlinx.coroutines.tasks.await
 import com.example.couple_guard_child.utils.ApiClient
-import android.os.PowerManager
-import java.text.SimpleDateFormat
-import java.util.Date 
-import java.util.Locale
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 class LocationWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
-    companion object {
-        private const val TAG = "LocationWorker"
-        private const val LOCATION_TIMEOUT_MS = 30000L // 30 seconds
-        private const val MAX_LOCATION_AGE_MINUTES = 10L
-    }
+    private val TAG = "LocationWorker"
+    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
     override suspend fun doWork(): Result {
-        val wakeLock = (applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LocationWorker::WakeLock")
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "🔄 LocationWorker started")
+        Log.d(TAG, "Run attempt: $runAttemptCount")
         
-        try {
-            wakeLock.acquire(10 * 60 * 1000L)
-            
-            Log.d(TAG, "========================================")
-            Log.d(TAG, "⏰ PERIODIC LOCATION UPDATE TRIGGERED")
-            Log.d(TAG, "Time: ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}")
-            Log.d(TAG, "Run attempt: $runAttemptCount")
-            Log.d(TAG, "========================================")
-
-            // Check pairing status
-            val isPaired = ApiClient.isPaired(applicationContext)
-            val deviceId = ApiClient.getDeviceId(applicationContext)
-            
-            Log.d(TAG, "Device paired: $isPaired")
-            Log.d(TAG, "Device ID: ${deviceId?.take(8) ?: "NULL"}...")
-            
-            if (!isPaired || deviceId.isNullOrEmpty()) {
-                Log.w(TAG, "❌ Device not paired, skipping")
+        return try {
+            // Check if device is paired
+            if (!ApiClient.isPaired(applicationContext)) {
+                Log.w(TAG, "⚠️ Device not paired, skipping location update")
                 return Result.success()
             }
-
-            // Get location with timeout
-            val location = try {
-                withTimeout(LOCATION_TIMEOUT_MS) {
-                    getLocation()
-                }
-            } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "❌ Location request timeout")
-                return if (runAttemptCount < 3) Result.retry() else Result.failure()
+            
+            // Check location permission
+            if (!hasLocationPermission()) {
+                Log.e(TAG, "❌ Location permission not granted")
+                return Result.failure()
             }
-
-            if (location == null) {
-                Log.e(TAG, "❌ Failed to get location")
-                return if (runAttemptCount < 3) Result.retry() else Result.failure()
-            }
-
-            Log.d(TAG, "✅ Location obtained:")
-            Log.d(TAG, "   Lat: ${location.latitude}")
-            Log.d(TAG, "   Lng: ${location.longitude}")
-            Log.d(TAG, "   Accuracy: ${location.accuracy}m")
-            Log.d(TAG, "   Age: ${(System.currentTimeMillis() - location.time) / 1000}s")
-
-            // Get battery level
-            val batteryLevel = try {
-                val batteryManager = applicationContext.getSystemService(
-                    Context.BATTERY_SERVICE
-                ) as? android.os.BatteryManager
+            
+            // Get location
+            val location = getLocation()
+            
+            if (location != null) {
+                Log.d(TAG, "📍 Location obtained: ${location.latitude}, ${location.longitude}")
+                Log.d(TAG, "Accuracy: ${location.accuracy}m")
+                Log.d(TAG, "Time: ${System.currentTimeMillis() - location.time}ms ago")
                 
-                batteryManager?.getIntProperty(
-                    android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY
-                ) ?: 0
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get battery level", e)
-                0
-            }
-
-            Log.d(TAG, "🔋 Battery level: $batteryLevel%")
-
-            // Send to server with retry
-            Log.d(TAG, "📤 Sending to API...")
-            val startTime = System.currentTimeMillis()
-            
-            val success = sendLocationWithRetry(
-                location.latitude,
-                location.longitude,
-                batteryLevel
-            )
-            
-            val duration = System.currentTimeMillis() - startTime
-
-            if (success) {
-                Log.d(TAG, "✅ Location sent successfully in ${duration}ms")
-                return Result.success()
+                // Get battery level
+                val batteryLevel = getBatteryLevel()
+                Log.d(TAG, "🔋 Battery: $batteryLevel%")
+                
+                // Send to server
+                val success = ApiClient.sendLocation(
+                    applicationContext,
+                    location.latitude,
+                    location.longitude,
+                    batteryLevel
+                )
+                
+                if (success) {
+                    Log.d(TAG, "✅ LocationWorker completed successfully")
+                    Log.d(TAG, "========================================")
+                    Result.success()
+                } else {
+                    Log.e(TAG, "❌ Failed to send location to server")
+                    Log.d(TAG, "========================================")
+                    
+                    // Retry on failure
+                    if (runAttemptCount < 3) {
+                        Log.d(TAG, "🔄 Will retry (attempt ${runAttemptCount + 1}/3)")
+                        Result.retry()
+                    } else {
+                        Log.e(TAG, "❌ Max retries reached")
+                        Result.failure()
+                    }
+                }
             } else {
-                Log.e(TAG, "❌ Failed to send location after retries")
-                return if (runAttemptCount < 3) Result.retry() else Result.failure()
+                Log.e(TAG, "❌ Could not get location")
+                Log.d(TAG, "========================================")
+                
+                // Retry on null location
+                if (runAttemptCount < 3) {
+                    Result.retry()
+                } else {
+                    Result.failure()
+                }
             }
-
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Worker exception", e)
-            return Result.retry()
-        } finally {
-            if (wakeLock.isHeld) {
-                wakeLock.release()
-                Log.d(TAG, "🔓 Wake lock released")
+            Log.e(TAG, "❌ Exception in LocationWorker", e)
+            e.printStackTrace()
+            Log.d(TAG, "========================================")
+            
+            // Retry on exception
+            if (runAttemptCount < 3) {
+                Result.retry()
+            } else {
+                Result.failure()
             }
         }
     }
 
-    private suspend fun getLocation(): android.location.Location? {
+    private fun hasLocationPermission(): Boolean {
+        return ActivityCompat.checkSelfPermission(
+            applicationContext,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private suspend fun getLocation(): Location? {
         return try {
-            Log.d(TAG, "Checking location permission...")
-            
-            // Check permission
-            if (applicationContext.checkSelfPermission(
-                    android.Manifest.permission.ACCESS_FINE_LOCATION
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.e(TAG, "❌ No location permission!")
-                return null
+            // First try to get last known location (fast)
+            val lastLocation = withTimeoutOrNull(5000L) {
+                if (ActivityCompat.checkSelfPermission(
+                        applicationContext,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    return@withTimeoutOrNull null
+                }
+                fusedLocationClient.lastLocation.await()
             }
             
-            Log.d(TAG, "✅ Permission granted")
-
-            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(
-                applicationContext
-            )
-
-            // Try last known location first
-            Log.d(TAG, "Trying last known location...")
-            var location = fusedLocationClient.lastLocation.await()
-
-            // If no last location or too old, get fresh one
-            if (location == null || isLocationTooOld(location)) {
-                Log.d(TAG, "Last location ${if (location == null) "not available" else "too old"}")
-                Log.d(TAG, "Requesting fresh location...")
-                
-                // Use high accuracy request
-                val locationRequest = LocationRequest.create().apply {
-                    priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-                    interval = 10000
-                    fastestInterval = 5000
-                    maxWaitTime = 20000
+            if (lastLocation != null && isLocationFresh(lastLocation)) {
+                Log.d(TAG, "✅ Using last known location")
+                return lastLocation
+            }
+            
+            // If last location is too old or null, request current location
+            Log.d(TAG, "🔄 Requesting current location")
+            val currentLocation = withTimeoutOrNull(30000L) {
+                if (ActivityCompat.checkSelfPermission(
+                        applicationContext,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    return@withTimeoutOrNull null
                 }
                 
-                location = fusedLocationClient.getCurrentLocation(
-                    LocationRequest.PRIORITY_HIGH_ACCURACY,
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
                     null
                 ).await()
-                
-                Log.d(TAG, "Fresh location ${if (location != null) "obtained" else "failed"}")
-            } else {
-                Log.d(TAG, "Using cached location")
             }
-
-            location
-
+            
+            if (currentLocation != null) {
+                Log.d(TAG, "✅ Got current location")
+            } else {
+                Log.w(TAG, "⚠️ Current location is null, falling back to last location")
+            }
+            
+            currentLocation ?: lastLocation
+            
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ Security exception getting location", e)
+            null
         } catch (e: Exception) {
             Log.e(TAG, "❌ Exception getting location", e)
             null
         }
     }
 
-    private fun isLocationTooOld(location: android.location.Location): Boolean {
-        val ageInMinutes = (System.currentTimeMillis() - location.time) / 1000 / 60
-        return ageInMinutes > MAX_LOCATION_AGE_MINUTES
+    private fun isLocationFresh(location: Location): Boolean {
+        val ageMillis = System.currentTimeMillis() - location.time
+        val maxAgeMillis = 5 * 60 * 1000 // 5 minutes
+        return ageMillis < maxAgeMillis
     }
 
-    private suspend fun sendLocationWithRetry(
-        latitude: Double,
-        longitude: Double,
-        batteryLevel: Int,
-        maxRetries: Int = 3
-    ): Boolean {
-        repeat(maxRetries) { attempt ->
-            try {
-                val success = ApiClient.sendLocation(
-                    applicationContext,
-                    latitude,
-                    longitude,
-                    batteryLevel
-                )
-                
-                if (success) {
-                    return true
-                }
-                
-                if (attempt < maxRetries - 1) {
-                    Log.d(TAG, "Retry ${attempt + 1}/$maxRetries in 2 seconds...")
-                    kotlinx.coroutines.delay(2000)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Send attempt ${attempt + 1} failed", e)
-                if (attempt < maxRetries - 1) {
-                    kotlinx.coroutines.delay(2000)
-                }
-            }
+    private fun getBatteryLevel(): Int {
+        return try {
+            val batteryManager = applicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            val level = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            level
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error getting battery level", e)
+            -1
         }
-        return false
     }
 }

@@ -1,125 +1,139 @@
-// lib/main.dart - FIXED VERSION
-import 'package:couple_guard_child/core/bindings/initial_binding.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:couple_guard_child/services/device_service.dart';
+import 'package:couple_guard_child/services/fcm_service.dart';
+import 'package:couple_guard_child/utils/local_storage.dart';
+import 'package:couple_guard_child/utils/native_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'core/themes/app_theme.dart';
-import 'services/background/background_service_manager.dart';
-import 'services/background/screen_capture_service.dart';
-import 'services/fcm/fcm_service.dart';
-import 'services/local/local_storage_service.dart';
-import 'screens/splash/splash_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'dart:developer' as developer;
 
-/// ✅ FIX: Simplified background handler tanpa dependency GetIt
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  developer.log('========================================', name: 'MAIN');
-  developer.log('🚀 APP STARTING', name: 'MAIN');
+  // Set system UI
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
 
   try {
-    // Step 1: Initialize Firebase
-    developer.log('Initializing Firebase...', name: 'MAIN');
+    // Initialize Firebase
+    developer.log('🔥 Initializing Firebase...');
     await Firebase.initializeApp();
-    developer.log('✅ Firebase initialized', name: 'MAIN');
+    developer.log('✅ Firebase initialized');
 
-    // Step 2: Register background FCM handler
-    developer.log('Registering FCM background handler...', name: 'MAIN');
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    developer.log('✅ FCM background handler registered', name: 'MAIN');
+    // Initialize FCM
+    developer.log('📱 Initializing FCM...');
+    await FcmHandler.initialize();
+    developer.log('✅ FCM initialized');
 
-    await ScreenCaptureService.initialize();
-    // Step 3: Initialize local storage
-    developer.log('Initializing local storage...', name: 'MAIN');
-    await LocalStorageService.init();
-    developer.log('✅ Local storage initialized', name: 'MAIN');
+    // Initialize services with GetX
+    developer.log('🔧 Initializing services...');
+    Get.put(DeviceService());
+    developer.log('✅ Services initialized');
 
-    // Step 4: Configure background service
-    developer.log('Configuring background service...', name: 'MAIN');
-    await BackgroundServiceManager.initializeService();
-    developer.log('✅ Background service configured', name: 'MAIN');
-
-    // Step 5: Initialize FCM (simplified)
-    developer.log('Initializing FCM...', name: 'MAIN');
-    await _initializeFCM();
-    developer.log('✅ FCM initialized', name: 'MAIN');
-
-    // Step 6: Lock orientation
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-
-    // Step 7: Set system UI overlay
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-      ),
-    );
-
-    developer.log('✅ APP INITIALIZATION COMPLETE', name: 'MAIN');
-    developer.log('========================================', name: 'MAIN');
+    await _initializeDeviceId();
   } catch (e, stackTrace) {
     developer.log(
-      '❌ APP INITIALIZATION FAILED',
-      name: 'MAIN',
+      '❌ Error during initialization',
       error: e,
       stackTrace: stackTrace,
       level: 1000,
     );
   }
 
-  runApp(const ChildApp());
+  runApp(const MyApp());
 }
 
-/// ✅ Simplified FCM initialization tanpa FcmHandler.initialize()
-Future<void> _initializeFCM() async {
+Future<void> _initializeDeviceId() async {
   try {
-    // Request permission
-    final messaging = FirebaseMessaging.instance;
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    developer.log('📱 Checking device ID...', name: 'main');
 
-    developer.log(
-      'FCM Permission: ${settings.authorizationStatus}',
-      name: 'FCM',
-    );
+    // Check if device ID already exists
+    String? storedDeviceId = await LocalStorageService.getDeviceId();
 
-    // Get token
-    final token = await messaging.getToken();
-    if (token != null) {
-      developer.log('FCM Token: ${token.substring(0, 20)}...', name: 'FCM');
-      await LocalStorageService.saveFcmToken(token);
+    if (storedDeviceId != null && storedDeviceId.isNotEmpty) {
+      developer.log(
+        '✅ Device ID already exists: ${storedDeviceId.substring(0, 8)}...',
+        name: 'main',
+      );
+
+      // Ensure it's synced to Native
+      await NativeBridgeHelper.syncDeviceDataToNative(
+        deviceId: storedDeviceId,
+        isPaired: await LocalStorageService.getIsPaired(),
+        familyCode: await LocalStorageService.getFamilyCode(),
+        parentId: await LocalStorageService.getParentId(),
+      );
+
+      return;
     }
 
-    // Listen for token refresh
-    messaging.onTokenRefresh.listen((newToken) {
-      developer.log('FCM Token refreshed', name: 'FCM');
-      LocalStorageService.saveFcmToken(newToken);
-    });
-  } catch (e) {
-    developer.log('FCM init error', name: 'FCM', error: e);
+    // Generate new device ID from hardware
+    developer.log('🔄 Generating new device ID...', name: 'main');
+    final deviceService = Get.find<DeviceService>();
+    final deviceId = await deviceService.getDeviceId();
+
+    if (deviceId.isEmpty) {
+      developer.log('❌ Failed to get device ID', name: 'main', level: 900);
+      throw Exception('Failed to get device ID');
+    }
+
+    developer.log(
+      '✅ Device ID generated: ${deviceId.substring(0, 8)}...',
+      name: 'main',
+    );
+
+    // Save to SharedPreferences (both Flutter and Native keys)
+    await LocalStorageService.saveDeviceId(deviceId);
+
+    // Sync to Native
+    await NativeBridgeHelper.syncDeviceDataToNative(
+      deviceId: deviceId,
+      isPaired: false, // Not paired yet
+    );
+
+    developer.log('✅ Device ID saved and synced to Native', name: 'main');
+  } catch (e, stackTrace) {
+    developer.log(
+      '❌ Failed to initialize device ID',
+      name: 'main',
+      error: e,
+      stackTrace: stackTrace,
+      level: 1000,
+    );
   }
 }
 
-class ChildApp extends StatelessWidget {
-  const ChildApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Family Safety',
+      title: 'Family Safety - Child',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      initialBinding: InitialBinding(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        fontFamily: 'Poppins', // Optional: Add custom font
+        scaffoldBackgroundColor: Colors.grey.shade50,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.grey.shade50,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.black87),
+          titleTextStyle: const TextStyle(
+            color: Colors.black87,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
       home: const SplashScreen(),
     );
   }

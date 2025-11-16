@@ -54,6 +54,7 @@ dependencies:
   screen_capturer: ^0.2.3
   screenshot: ^3.0.0
   android_intent_plus: ^6.0.0
+  flutter_local_notifications: ^19.5.0
 
 dev_dependencies:
   flutter_test:
