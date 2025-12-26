@@ -1,3 +1,4 @@
+import 'package:couple_guard_child/screens/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -58,11 +59,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
       developer.log('Notification: ${notificationStatus.name}', name: _tag);
 
       // 4. Notification access (NotificationListenerService)
-      _notificationAccessGranted.value = await _checkNotificationAccess();
-      developer.log(
-        'Notification Access: ${_notificationAccessGranted.value}',
-        name: _tag,
-      );
 
       // 5. Battery optimization
       _batteryOptimizationDisabled.value = await _checkBatteryOptimization();
@@ -184,7 +180,11 @@ class _PermissionScreenState extends State<PermissionScreen> {
 
     try {
       await _platform.invokeMethod('openNotificationAccess');
-
+      _notificationAccessGranted.value = await _checkNotificationAccess();
+      developer.log(
+        'Notification Access: ${_notificationAccessGranted.value}',
+        name: _tag,
+      );
       // Show instruction dialog
       Get.dialog(
         AlertDialog(
@@ -260,70 +260,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
   }
 
   /// Open autostart settings (OEM-specific)
-  Future<void> _openAutoStartSettings() async {
-    developer.log('⚡ Opening autostart settings...', name: _tag);
-
-    // Show manufacturer selection dialog
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Select Your Phone Brand'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildManufacturerButton('Xiaomi (MIUI)', 'xiaomi'),
-            _buildManufacturerButton('Oppo (ColorOS)', 'oppo'),
-            _buildManufacturerButton('Vivo (Funtouch)', 'vivo'),
-            _buildManufacturerButton('Samsung (OneUI)', 'samsung'),
-            _buildManufacturerButton('Huawei (EMUI)', 'huawei'),
-            _buildManufacturerButton('OnePlus', 'oneplus'),
-            _buildManufacturerButton('Other', 'generic'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildManufacturerButton(String label, String manufacturer) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: ElevatedButton(
-        onPressed: () async {
-          Get.back();
-          try {
-            await _platform.invokeMethod('openAutoStartSettings', {
-              'manufacturer': manufacturer,
-            });
-
-            Get.dialog(
-              AlertDialog(
-                title: const Text('Enable Autostart'),
-                content: Text(
-                  'Please enable autostart for "Couple Guard Child" in the $label settings.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Get.back(),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
-            );
-          } catch (e) {
-            developer.log(
-              'Error opening autostart for $manufacturer',
-              name: _tag,
-              error: e,
-            );
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(double.infinity, 40),
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-
   /// Show permission explanation dialog
   void _showPermissionDialog(
     String title,
@@ -386,6 +322,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
       // Start tracking services
       developer.log('🚀 Starting tracking services...', name: _tag);
       final started = await NativeBridgeHelper.startTrackingServices();
+      Get.offAll(() => const DashboardScreen());
 
       if (started) {
         developer.log('✅ Tracking services started', name: _tag);
@@ -397,9 +334,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-
-        // Navigate to home/main screen
-        // Get.offAll(() => const HomeScreen());
 
         developer.log('✅ Setup completed successfully', name: _tag);
       } else {
@@ -500,19 +434,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
                 isGranted: _batteryOptimizationDisabled.value,
                 onTap: _openBatteryOptimizationSettings,
                 isCritical: true,
-              ),
-
-              const SizedBox(height: 12),
-
-              // Autostart (OEM)
-              _buildPermissionCard(
-                icon: Icons.power_settings_new,
-                title: 'Autostart Permission',
-                description: 'Restart app after reboot',
-                isGranted: false, // Can't check programmatically
-                onTap: _openAutoStartSettings,
-                isCritical: true,
-                showCheckmark: false,
               ),
 
               const SizedBox(height: 32),

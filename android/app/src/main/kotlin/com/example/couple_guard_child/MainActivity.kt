@@ -21,6 +21,7 @@ import com.google.android.gms.location.LocationServices
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.os.PowerManager
 
 class MainActivity : FlutterActivity() {
     private val TAG = "MainActivity"
@@ -31,9 +32,6 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         Log.d(TAG, "✅ MainActivity onCreate")
-        
-        // ✅ ADDED: Request battery optimization exemption
-        requestBatteryOptimization()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -77,6 +75,12 @@ class MainActivity : FlutterActivity() {
                     "testSendNotification" -> {
                         testSendNotification(result)
                     }
+                    "isNotificationAccessGranted" -> {
+                        result.success(isNotificationAccessGranted())
+                    }
+                    "isBatteryOptimizationDisabled" -> {
+                        result.success(isBatteryOptimizationDisabled())
+                    }
                     else -> {
                         result.notImplemented()
                     }
@@ -99,6 +103,41 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+    }
+
+    private fun isNotificationAccessGranted(): Boolean {
+        return try {
+            val enabledListeners = Settings.Secure.getString(
+                contentResolver,
+                "enabled_notification_listeners"
+            )
+            
+            val packageName = packageName
+            val result = enabledListeners?.contains(packageName) ?: false
+            
+            Log.d(TAG, "Notification access granted: $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking notification access", e)
+            false
+        }
+    }
+
+    private fun isBatteryOptimizationDisabled(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                val result = powerManager.isIgnoringBatteryOptimizations(packageName)
+                
+                Log.d(TAG, "Battery optimization disabled: $result")
+                result
+            } else {
+                true // Not applicable for Android < 6.0
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking battery optimization", e)
+            false
+        }
     }
 
     private fun openNotificationAccessSettings() {
@@ -126,21 +165,6 @@ class MainActivity : FlutterActivity() {
                 startActivity(intent)
             } catch (e2: Exception) {
                 Log.e(TAG, "Error opening general battery settings", e2)
-            }
-        }
-    }
-
-    private fun requestBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error requesting battery optimization", e)
-                }
             }
         }
     }

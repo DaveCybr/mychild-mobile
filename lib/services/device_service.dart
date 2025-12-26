@@ -191,6 +191,34 @@ class DeviceService extends GetxService {
     }
   }
 
+  Future<bool> unpairDevice() async {
+    try {
+      final deviceId = await getDeviceId();
+
+      developer.log('Unpairing device: $deviceId', name: _tag);
+
+      final response = await _dio.post(
+        '/devices/unpair',
+        data: {'device_id': deviceId},
+      );
+
+      if (response.data['success'] == true) {
+        developer.log('✅ Device unpaired successfully', name: _tag);
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      developer.log(
+        '❌ Failed to unpair device',
+        name: _tag,
+        error: e,
+        level: 1000,
+      );
+      return false;
+    }
+  }
+
   /// Update FCM token
   Future<bool> updateFcmToken(String fcmToken) async {
     try {

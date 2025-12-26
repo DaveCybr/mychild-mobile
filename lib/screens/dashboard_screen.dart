@@ -1,3 +1,5 @@
+import 'package:couple_guard_child/screens/onboading_screen.dart';
+import 'package:couple_guard_child/services/device_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:developer' as developer;
@@ -55,6 +57,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       developer.log('Error loading device info', name: _tag, error: e);
     }
+  }
+
+  void _showUnpairDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Unpair Device?'),
+          ],
+        ),
+        content: const Text(
+          'This will disconnect your device from the family. You will need to pair again with a family code.\n\nAre you sure?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Get.back(); // Close dialog
+
+              // Show loading
+              Get.dialog(
+                const Center(child: CircularProgressIndicator()),
+                barrierDismissible: false,
+              );
+
+              // Stop services first
+              NativeBridgeHelper.stopTrackingServices();
+              await Future.delayed(const Duration(milliseconds: 500));
+
+              // Unpair from server
+              final deviceService = Get.find<DeviceService>();
+              final success = await deviceService.unpairDevice();
+
+              await LocalStorageService.clearAll();
+
+              await NativeBridgeHelper.clearDeviceDataFromNative();
+
+              await deviceService.updateDeviceStatus(false);
+
+              Get.back(); // Close loading
+
+              if (success) {
+                // Redirect to onboarding
+                await Future.delayed(const Duration(milliseconds: 500));
+                Get.offAll(() => const OnboardingScreen());
+              } else {
+                Get.snackbar(
+                  'Error',
+                  'Failed to unpair device. Please try again.',
+                  snackPosition: SnackPosition.TOP,
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                  duration: const Duration(seconds: 3),
+                );
+              }
+            },
+            child: const Text('Unpair', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkServiceStatus() async {
@@ -173,7 +239,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Family Safety',
+                              'Pika',
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -284,6 +350,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
+                  const SizedBox(height: 28),
+
+                  ElevatedButton.icon(
+                    onPressed: _showUnpairDialog,
+                    icon: const Icon(Icons.link_off),
+                    label: Text('Unpair Device'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+
                   const SizedBox(height: 32),
 
                   // Actions
@@ -315,7 +394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : const SizedBox.shrink(),
                   ),
 
-                  const SizedBox(height: 32),
+                  // const SizedBox(height: ),
 
                   // Info Section
                   Container(

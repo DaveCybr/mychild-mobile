@@ -43,7 +43,7 @@
 
     <application
         android:name=".MyApplication"
-        android:label="Couple Guard Child"
+        android:label="Pika"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
